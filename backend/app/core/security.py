@@ -1,0 +1,50 @@
+from typing import Optional, Dict, Any
+import jwt
+from fastapi import Header, HTTPException, status
+from app.core.config import settings
+from app.core.exceptions import AuthenticationException
+
+
+def verify_supabase_token(token: str) -> Dict[str, Any]:
+    """
+    Decodes and verifies a Supabase JWT token.
+    Prepares authentication verification for Phase 2.
+    """
+    if not settings.SUPABASE_JWT_SECRET or settings.SUPABASE_JWT_SECRET == "placeholder-jwt-secret":
+        # In early development / Phase 0, if secret is unset, allow mock/fallback decode
+        try:
+            return jwt.decode(token, options={"verify_signature": False})
+        except Exception as exc:
+            raise AuthenticationException(f"Invalid JWT format: {str(exc)}")
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise AuthenticationException("Authentication token has expired")
+    except jwt.InvalidTokenError as exc:
+        raise AuthenticationException(f"Invalid authentication token: {str(exc)}")
+
+
+def get_current_user_id(authorization: Optional[str] = Header(None)) -> Optional[str]:
+    """
+    Extracts user_id (sub) from Authorization Bearer token header.
+    Returns None if no header is supplied (allowing anonymous scans).
+    """
+    if not authorization:
+        return None
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header must start with 'Bearer '",
+        )
+
+    token = authorization.split(" ")[1]
+    payload = verify_supabase_token(token)
+    return payload.get("sub")
