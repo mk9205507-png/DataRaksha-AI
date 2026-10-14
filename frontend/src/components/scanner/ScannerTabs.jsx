@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mail, Globe, FileCode2 } from 'lucide-react';
 
-export const ScannerTabs = ({ currentType, onSelectType }) => {
+export const ScannerTabs = ({ currentType, onSelectType, disabled = false }) => {
   const tabs = [
     {
       id: 'message',
@@ -24,7 +24,7 @@ export const ScannerTabs = ({ currentType, onSelectType }) => {
   ];
 
   return (
-    <div className="scanner-tabs-wrapper" id="scanner-type-selector">
+    <div className="scanner-tabs-wrapper" id="scanner-type-selector" role="tablist">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = currentType === tab.id;
@@ -32,9 +32,12 @@ export const ScannerTabs = ({ currentType, onSelectType }) => {
           <button
             key={tab.id}
             id={`scanner-tab-${tab.id}`}
-            className={`scanner-tab-card ${isActive ? 'active' : ''}`}
-            onClick={() => onSelectType(tab.id)}
+            role="tab"
+            aria-selected={isActive}
+            className={`scanner-tab-card ${isActive ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+            onClick={() => !disabled && onSelectType(tab.id)}
             type="button"
+            disabled={disabled}
           >
             <div className="tab-icon-wrapper">
               <Icon size={22} />
@@ -51,3 +54,4 @@ export const ScannerTabs = ({ currentType, onSelectType }) => {
 };
 
 export default ScannerTabs;
+

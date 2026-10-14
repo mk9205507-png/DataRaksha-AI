@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle, Info, XCircle, X } from 'lucide-react';
 
-export const Alert = ({ type = 'info', title, message, onClose }) => {
+export const Alert = ({ type = 'info', title, message, onClose, action }) => {
   const iconMap = {
     info: <Info size={18} className="alert-icon info" />,
     success: <CheckCircle size={18} className="alert-icon success" />,
@@ -18,13 +18,17 @@ export const Alert = ({ type = 'info', title, message, onClose }) => {
           <span className="alert-message">{message}</span>
         </div>
       </div>
-      {onClose && (
-        <button className="alert-close-btn" onClick={onClose} aria-label="Close alert">
-          <X size={16} />
-        </button>
-      )}
+      <div className="alert-actions-wrapper">
+        {action}
+        {onClose && (
+          <button className="alert-close-btn" onClick={onClose} aria-label="Close alert">
+            <X size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
 
 export default Alert;
+
