@@ -8,6 +8,41 @@ class DataRakshaException(HTTPException):
         super().__init__(status_code=status_code, detail=detail)
 
 
+class InvalidInputException(DataRakshaException):
+    """Raised when input text is empty or whitespace only (HTTP 400)."""
+
+    def __init__(self, detail: str = "Please enter text or a URL to analyze."):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class InvalidURLException(DataRakshaException):
+    """Raised when URL structure is invalid or unparseable (HTTP 422)."""
+
+    def __init__(self, detail: str = "Please enter a valid web address (e.g., https://example.com)."):
+        super().__init__(status_code=422, detail=detail)
+
+
+class PayloadTooLargeException(DataRakshaException):
+    """Raised when input length exceeds 20,000 characters (HTTP 413)."""
+
+    def __init__(self, detail: str = "Payload exceeds maximum character limit of 20,000."):
+        super().__init__(status_code=413, detail=detail)
+
+
+class RateLimitException(DataRakshaException):
+    """Raised when client exceeds request rate threshold (HTTP 429)."""
+
+    def __init__(self, detail: str = "Request limit reached. Please wait a moment."):
+        super().__init__(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
+
+
+class ServiceUnavailableException(DataRakshaException):
+    """Raised when external AI or threat intelligence services are unreachable (HTTP 503)."""
+
+    def __init__(self, detail: str = "Analysis service is temporarily unavailable. Please try again shortly."):
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+
+
 class ThreatScanException(DataRakshaException):
     """Raised when scan engine fails during analysis."""
 

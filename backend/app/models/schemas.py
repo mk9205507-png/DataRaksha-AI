@@ -31,6 +31,12 @@ class HealthResponse(BaseModel):
     version: str = Field(default="1.0.0", examples=["1.0.0"])
 
 
+MANDATORY_SAFETY_DISCLAIMER = (
+    "No obvious risks were detected; however, this does not guarantee the content "
+    "is completely safe. Always exercise caution when sharing sensitive information online."
+)
+
+
 # --- Threat & Scan Schemas ---
 
 class ThreatItem(BaseModel):
@@ -40,15 +46,15 @@ class ThreatItem(BaseModel):
 
 
 class MessageScanRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=50000, description="SMS, email, or message body to analyze")
+    content: str = Field(..., description="SMS, email, or message body to analyze")
 
 
 class LinkScanRequest(BaseModel):
-    url: str = Field(..., min_length=3, max_length=2048, description="Target URL link to evaluate for threats")
+    url: str = Field(..., description="Target URL link to evaluate for threats")
 
 
 class PolicyScanRequest(BaseModel):
-    policy_text: str = Field(..., min_length=1, max_length=200000, description="Raw text of Terms of Service or Privacy Policy")
+    policy_text: str = Field(..., description="Raw text of Terms of Service or Privacy Policy")
 
 
 class ScanResultResponse(BaseModel):
@@ -56,11 +62,10 @@ class ScanResultResponse(BaseModel):
     risk_level: RiskLevel
     risk_score: int = Field(..., ge=0, le=100, description="Calculated threat rating between 0 and 100")
     summary: str
-    detected_threats: List[ThreatItem] = Field(default_factory=list)
+    detected_threats: List[str] = Field(default_factory=list)
+    exposed_pii: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
-    disclaimer: str = Field(
-        default="No scan can guarantee 100% safety. Always exercise personal caution online.",
-    )
+    disclaimer: str = Field(default=MANDATORY_SAFETY_DISCLAIMER)
 
 
 # --- Letter Generation Schemas ---
