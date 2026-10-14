@@ -3,8 +3,16 @@ import ScannerTabs from '../components/scanner/ScannerTabs';
 import InputBox from '../components/scanner/InputBox';
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
-import { Shield, Sparkles, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import apiClient from '../services/api';
+import { Sparkles, RotateCcw } from 'lucide-react';
+import { scanService } from '../services/scanService';
+
+const SAMPLE_INPUTS = {
+  message:
+    'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately or call +91-9876543210 to verify your PIN.',
+  link: 'https://security-login-update-credentials.top/account',
+  policy:
+    'We collect your exact GPS location, browser history, device identifiers, and biometric data. We share and monetize this information with third-party advertising partners and data brokers indefinitely without mandatory prior notice.',
+};
 
 export const Dashboard = () => {
   const [scanType, setScanType] = useState('message');
@@ -13,20 +21,54 @@ export const Dashboard = () => {
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  const sampleInputs = {
-    message: 'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately or call +91-9876543210 to verify your PIN.',
-    link: 'https://security-login-update-credentials.top/account',
-    policy: 'We collect your exact GPS location, browser history, device identifiers, and biometric data. We share and monetize this information with third-party advertising partners and data brokers indefinitely.',
+  const handleLoadSample = () => {
+    setInputValue(SAMPLE_INPUTS[scanType]);
+    setResult(null);
+    setAlert(null);
   };
 
-  const handleLoadSample = () => {
-    setInputValue(sampleInputs[scanType]);
-    setResult(null);
+  const validateInput = () => {
+    const trimmed = inputValue.trim();
+
+    // 400: Empty input check
+    if (!trimmed) {
+      setAlert({
+        type: 'warning',
+        message: 'Please enter text or a URL to analyze.',
+        canRetry: false,
+      });
+      return false;
+    }
+
+    // 413: Payload too large (exceeding 20,000 characters)
+    if (trimmed.length > 20000) {
+      setAlert({
+        type: 'error',
+        message: 'Content exceeds the maximum limit of 20,000 characters.',
+        canRetry: false,
+      });
+      return false;
+    }
+
+    // 422: Invalid URL format check on link tab
+    if (scanType === 'link') {
+      const urlPattern = /^(https?:\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/.*)?$/i;
+      const ipPattern = /^(https?:\/\/)?(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/;
+      if (!urlPattern.test(trimmed) && !ipPattern.test(trimmed)) {
+        setAlert({
+          type: 'warning',
+          message: 'Please enter a valid web address (e.g., https://example.com).',
+          canRetry: false,
+        });
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const handleScan = async () => {
-    if (!inputValue.trim()) {
-      setAlert({ type: 'warning', message: 'Please enter content to analyze.' });
+    if (!validateInput()) {
       return;
     }
 
@@ -34,67 +76,47 @@ export const Dashboard = () => {
     setAlert(null);
 
     try {
-      // Attempt backend API call if backend is running
-      const response = await apiClient.post('/scan', {
-        type: scanType,
-        content: inputValue,
-      });
-      setResult(response.data);
-    } catch {
-      // Graceful local evaluation mock demonstration for frontend architecture
-      setTimeout(() => {
-        const isPhishing = inputValue.toLowerCase().includes('urgent') || inputValue.toLowerCase().includes('bank') || inputValue.toLowerCase().includes('pin');
-        const isLinkSuspicious = scanType === 'link' && !inputValue.startsWith('https://');
-        const isPolicyRisky = scanType === 'policy' && (inputValue.includes('broker') || inputValue.includes('monetize') || inputValue.includes('indefinitely'));
+      let scanResponse;
 
-        let generatedRisk = 'Low';
-        let generatedScore = 18;
-        let detectedThreats = [];
-        let recommendations = ['Content appears to have standard risk characteristics.'];
-        let exposedPii = [];
-
-        if (isPhishing) {
-          generatedRisk = 'High';
-          generatedScore = 88;
-          detectedThreats = ['Urgent Social Engineering Scam Cue', 'Financial Impersonation Indicator', 'Suspicious Contact Request'];
-          recommendations = [
-            'Do not click any embedded links or call the provided telephone numbers.',
-            'Never share banking PINs, OTPs, or passwords.',
-            'Forward the message to your official bank customer support.',
-          ];
-          exposedPii = ['Phone Number: +91-9876543210', 'Bank Name Mentioned'];
-        } else if (isPolicyRisky) {
-          generatedRisk = 'Medium';
-          generatedScore = 65;
-          detectedThreats = ['Third-Party Data Broker Monetization', 'Continuous Biometric & GPS Telemetry', 'Indefinite Data Retention Policy'];
-          recommendations = [
-            'Opt-out of third-party behavioral profiling and broker sales.',
-            'Revoke location and biometric permissions in mobile app settings.',
-            'Submit a statutory Data Access Request to review your stored records.',
-          ];
-        } else if (isLinkSuspicious) {
-          generatedRisk = 'High';
-          generatedScore = 92;
-          detectedThreats = ['Non-HTTPS Insecure Protocol', 'Deceptive Domain Structure'];
-          recommendations = ['Do not visit this webpage or input credentials.'];
+      if (scanType === 'message') {
+        scanResponse = await scanService.scanMessage(inputValue.trim());
+      } else if (scanType === 'link') {
+        let targetUrl = inputValue.trim();
+        if (!/^https?:\/\//i.test(targetUrl)) {
+          targetUrl = `https://${targetUrl}`;
         }
+        scanResponse = await scanService.scanLink(targetUrl);
+      } else if (scanType === 'policy') {
+        scanResponse = await scanService.scanPolicy(inputValue.trim());
+      }
 
-        setResult({
-          scan_type: scanType,
-          risk_level: generatedRisk,
-          risk_score: generatedScore,
-          summary: isPhishing 
-            ? 'This message displays classic signs of social engineering designed to harvest banking credentials under false urgency.'
-            : isPolicyRisky
-            ? 'The legal policy grants broad authorization to sell user telemetry to marketing aggregators with perpetual retention.'
-            : 'No obvious fraudulent heuristics or high-risk telemetry detected in the submitted input.',
-          detected_threats: detectedThreats,
-          recommendations: recommendations,
-          exposed_pii: exposedPii,
-        });
+      setResult(scanResponse);
+    } catch (error) {
+      let message = 'Threat analysis service is temporarily unavailable. Please try again shortly.';
+      const status = error.response?.status;
 
-        setIsLoading(false);
-      }, 700);
+      if (status === 400) {
+        message = 'Please enter text or a URL to analyze.';
+      } else if (status === 422) {
+        message = 'Please enter a valid web address (e.g., https://example.com).';
+      } else if (status === 413) {
+        message = 'Content exceeds the maximum limit of 20,000 characters.';
+      } else if (status === 429) {
+        message = 'Rate limit reached. Please wait a few moments before trying again.';
+      } else if (status === 503) {
+        message = 'Threat analysis service is temporarily unavailable. Please try again shortly.';
+      } else if (error.response?.data?.detail) {
+        message =
+          typeof error.response.data.detail === 'string'
+            ? error.response.data.detail
+            : message;
+      }
+
+      setAlert({
+        type: 'error',
+        message,
+        canRetry: true,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -106,13 +128,13 @@ export const Dashboard = () => {
       <div className="dashboard-hero">
         <div className="hero-badge">
           <Sparkles size={14} className="hero-badge-icon" />
-          <span>Intelligent Threat Intelligence Matrix</span>
+          <span>Core AI & Threat Detection Engines</span>
         </div>
         <h1 className="hero-title">
           Detect Digital Risks & Protect <span className="gradient-text">Personal Data</span>
         </h1>
         <p className="hero-subtitle">
-          Instantly evaluate suspicious messages, verify deceptive web URLs, and deconstruct complex privacy policies into plain language.
+          Instantly evaluate suspicious messages for phishing and credential leaks, check links against Google Safe Browsing, and simplify complex privacy policies.
         </p>
       </div>
 
@@ -121,6 +143,20 @@ export const Dashboard = () => {
           type={alert.type}
           message={alert.message}
           onClose={() => setAlert(null)}
+          action={
+            alert.canRetry ? (
+              <button
+                type="button"
+                className="btn btn-ghost alert-retry-btn"
+                onClick={() => {
+                  setAlert(null);
+                  handleScan();
+                }}
+              >
+                <RotateCcw size={14} /> Retry
+              </button>
+            ) : null
+          }
         />
       )}
 
@@ -129,40 +165,71 @@ export const Dashboard = () => {
         {/* Scanner Type Switcher */}
         <ScannerTabs
           currentType={scanType}
+          disabled={isLoading}
           onSelectType={(type) => {
             setScanType(type);
             setResult(null);
+            setAlert(null);
             setInputValue('');
           }}
         />
 
-        {/* Quick sample loader helper */}
+        {/* Quick Sample Test Toolbar */}
         <div className="quick-test-bar">
-          <span className="quick-test-label">Want to test?</span>
+          <span className="quick-test-label">Quick Test:</span>
           <button
             type="button"
             className="btn btn-ghost quick-test-btn"
             onClick={handleLoadSample}
+            disabled={isLoading}
           >
-            Load Sample {scanType === 'message' ? 'Phishing Text' : scanType === 'link' ? 'Malicious Link' : 'Predatory Policy'}
+            Load Sample{' '}
+            {scanType === 'message'
+              ? 'Phishing Message'
+              : scanType === 'link'
+              ? 'Malicious Link'
+              : 'Predatory Policy'}
           </button>
         </div>
 
-        {/* Input Box */}
+        {/* Scanner Input Box */}
         <InputBox
           scanType={scanType}
           value={inputValue}
-          onChange={setInputValue}
+          onChange={(val) => {
+            setInputValue(val);
+            if (alert) setAlert(null);
+          }}
           onSubmit={handleScan}
           isLoading={isLoading}
+          onLoadSample={handleLoadSample}
           onClear={() => {
             setInputValue('');
             setResult(null);
+            setAlert(null);
           }}
         />
 
+        {/* Loading Skeleton Indicator */}
+        {isLoading && (
+          <div className="report-card glass-card skeleton-card" id="scan-loading-skeleton">
+            <div className="skeleton-header">
+              <div className="skeleton-circle"></div>
+              <div className="skeleton-lines">
+                <div className="skeleton-line skeleton-title"></div>
+                <div className="skeleton-line skeleton-subtitle"></div>
+              </div>
+            </div>
+            <div className="skeleton-body">
+              <div className="skeleton-line skeleton-full"></div>
+              <div className="skeleton-line skeleton-full"></div>
+              <div className="skeleton-line skeleton-half"></div>
+            </div>
+          </div>
+        )}
+
         {/* Threat Report Result */}
-        {result && <ResultCard report={result} />}
+        {!isLoading && result && <ResultCard report={result} />}
       </div>
     </div>
   );
