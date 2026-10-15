@@ -1,8 +1,9 @@
-import React from 'react';
-import { BarChart3, Activity, ShieldCheck, AlertTriangle, Database, Zap, Cpu } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, Activity, ShieldCheck, AlertTriangle, Database, Zap, Cpu, Lock, ShieldAlert } from 'lucide-react';
+import apiClient from '../services/api';
 
-export const AdminDashboard = () => {
-  const metrics = {
+export const AdminDashboard = ({ user, onPromptLogin }) => {
+  const [metrics, setMetrics] = useState({
     total_scans: 1420,
     scans_today: 84,
     risk_breakdown: {
@@ -20,7 +21,63 @@ export const AdminDashboard = () => {
       safe_browsing_api: 'Operational (Quota 94% remaining)',
       supabase_db: 'Healthy (RLS Enforced)',
     },
-  };
+  });
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      apiClient
+        .get('/admin/metrics')
+        .then((res) => {
+          if (res.data) {
+            setMetrics((prev) => ({
+              ...prev,
+              scans_today: res.data.total_scans_today ?? prev.scans_today,
+            }));
+          }
+        })
+        .catch(() => {
+          // Gracefully retain baseline metrics if backend is offline/mock
+        });
+    }
+  }, [user]);
+
+  if (!user || user.role !== 'admin') {
+    return (
+      <div className="admin-page" id="admin-view">
+        <div className="dashboard-hero">
+          <div className="hero-badge">
+            <Lock size={14} className="hero-badge-icon" />
+            <span>Restricted Access</span>
+          </div>
+          <h1 className="hero-title">
+            Administrator <span className="gradient-text">Portal</span>
+          </h1>
+          <p className="hero-subtitle">
+            System threat metrics, global scan aggregations, and service telemetry are reserved for administrative accounts.
+          </p>
+        </div>
+
+        <div className="glass-card" style={{ maxWidth: '560px', margin: '2rem auto', padding: '2.5rem', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', padding: '1rem', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', marginBottom: '1rem' }}>
+            <ShieldAlert size={36} />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>Admin Privileges Required</h2>
+          <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+            {user
+              ? `You are currently signed in as ${user.email} with role '${user.role}'. An administrator account is required to access system telemetry.`
+              : 'You must be signed in with an administrator account to view real-time platform statistics.'}
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onPromptLogin}
+          >
+            {user ? 'Switch / Sign In as Admin' : 'Sign In as Administrator'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-page" id="admin-view">

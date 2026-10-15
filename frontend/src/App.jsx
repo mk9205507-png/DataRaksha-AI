@@ -55,7 +55,7 @@ function AppContent() {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'letters':
-        return <LetterGenerator />;
+        return <LetterGenerator user={user} />;
 
       case 'history':
         if (!isAuthenticated) {
@@ -88,7 +88,7 @@ function AppContent() {
             </div>
           );
         }
-        return <History />;
+        return <History user={user} onPromptLogin={handleOpenAuth} />;
 
       case 'admin':
         if (!isAuthenticated) {
@@ -153,14 +153,14 @@ function AppContent() {
           );
         }
 
-        return <AdminDashboard />;
+        return <AdminDashboard user={user} onPromptLogin={handleOpenAuth} />;
 
       case 'auth':
         return <AuthPage onAuthSuccess={handleAuthSuccess} />;
 
       case 'scanner':
       default:
-        return <Dashboard />;
+        return <Dashboard user={user} />;
     }
   };
 
