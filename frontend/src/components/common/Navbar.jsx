@@ -49,6 +49,19 @@ export const Navbar = ({ activeTab, setActiveTab, user, onOpenAuth, onLogout }) 
           {user ? (
             <div className="user-profile-badge">
               <span className="user-email-tag">{user.email || 'User'}</span>
+              {user.role === 'admin' && (
+                <span className="admin-tag-pill" style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#f87171',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>Admin</span>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost action-sm logout-btn"

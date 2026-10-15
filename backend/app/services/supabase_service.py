@@ -70,5 +70,24 @@ class SupabaseService:
             logger.error(f"Failed to persist letter: {e}")
             return None
 
+    async def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Fetches the user's extended profile from public.profiles."""
+        if not self._client:
+            return None
+
+        try:
+            res = (
+                self._client.table("profiles")
+                .select("*")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+            return res.data if res else None
+        except Exception as e:
+            logger.warning(f"Could not fetch profile for user {user_id}: {e}")
+            return None
+
 
 supabase_service = SupabaseService()
+

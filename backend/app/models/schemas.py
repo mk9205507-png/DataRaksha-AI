@@ -96,3 +96,25 @@ class ScanHistoryItem(BaseModel):
     risk_score: int
     summary: str
     created_at: str
+
+
+# --- User & Auth Schemas (Phase 2) ---
+
+class UserRole(str, Enum):
+    INDIVIDUAL = "individual"
+    ADMIN = "admin"
+
+
+class UserContext(BaseModel):
+    id: str
+    email: str
+    role: str = "individual"
+    created_at: Optional[str] = None
+
+
+class UserProfileResponse(BaseModel):
+    id: str
+    email: str
+    role: str = "individual"
+    created_at: Optional[str] = None
+

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import HistoryTable from '../components/history/HistoryTable';
 import Alert from '../components/common/Alert';
-import { History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon, Shield, LogIn } from 'lucide-react';
+import apiClient from '../services/api';
 
-export const History = () => {
+export const History = ({ user, onPromptLogin }) => {
   const [filterType, setFilterType] = useState('all');
   const [filterRisk, setFilterRisk] = useState('all');
   const [alert, setAlert] = useState(null);
@@ -48,6 +49,21 @@ export const History = () => {
     },
   ]);
 
+  useEffect(() => {
+    if (user) {
+      apiClient
+        .get('/history')
+        .then((res) => {
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            setScans(res.data);
+          }
+        })
+        .catch(() => {
+          // Gracefully fallback to sample records if offline
+        });
+    }
+  }, [user]);
+
   const handleDeleteScan = (id) => {
     setScans(scans.filter((s) => s.id !== id));
     setAlert({ type: 'info', message: 'Record removed from audit trail.' });
@@ -78,6 +94,27 @@ export const History = () => {
           Review past scans, monitor threat ratings over time, and manage your stored privacy audit logs with granular deletion controls.
         </p>
       </div>
+
+      {!user ? (
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #06b6d4' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Shield size={20} className="text-cyan" />
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #cbd5e1)' }}>
+              Viewing sample records. Sign in to synchronize and encrypt your personal scan history with Row-Level Security.
+            </span>
+          </div>
+          <button type="button" className="btn btn-secondary action-sm" onClick={onPromptLogin}>
+            <LogIn size={14} /> Sign In
+          </button>
+        </div>
+      ) : (
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1.25rem', marginBottom: '1.5rem', borderLeft: '4px solid #10b981' }}>
+          <Shield size={18} className="text-emerald" />
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #cbd5e1)' }}>
+            Authenticated as <strong>{user.email}</strong>. Scan history is isolated to your user ID via PostgreSQL Row-Level Security.
+          </span>
+        </div>
+      )}
 
       {alert && (
         <Alert
