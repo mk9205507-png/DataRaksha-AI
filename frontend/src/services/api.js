@@ -10,15 +10,37 @@ export const apiClient = axios.create({
   timeout: 30000,
 });
 
-// Interceptor to attach Supabase JWT token if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('dataraksha_auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Request interceptor: Attach Supabase JWT token to Bearer authorization header
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('dataraksha_auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-}, (error) => {
-  return Promise.reject(error);
-});
+);
+
+// Response interceptor: Detect 401 Unauthorized or 403 Forbidden
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.warn('API returned 401 Unauthorized. Notifying auth session expiration.');
+      localStorage.removeItem('dataraksha_auth_token');
+      window.dispatchEvent(
+        new CustomEvent('dataraksha:unauthorized', {
+          detail: {
+            message: error.response.data?.detail || 'Session expired. Please sign in again.',
+          },
+        })
+      );
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default apiClient;
