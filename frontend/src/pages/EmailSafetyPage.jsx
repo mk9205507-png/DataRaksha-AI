@@ -15,6 +15,7 @@ import {
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
+import { gmailService } from '../services/gmailService';
 
 // Scenario presets matching real threat cases
 const EMAIL_PRESETS = [
@@ -60,18 +61,31 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [inboxEmails, setInboxEmails] = useState([]);
 
   const handleSelectPreset = (e) => {
-    const presetId = e.target.value;
-    setSelectedPresetId(presetId);
-    if (!presetId) {
+    const selectedId = e.target.value;
+    setSelectedPresetId(selectedId);
+    if (!selectedId) {
       setEmailContent('');
       setSenderEmail('');
       setResult(null);
       return;
     }
 
-    const found = EMAIL_PRESETS.find((p) => p.id === presetId);
+    // Check inboxEmails first
+    const fromInbox = inboxEmails.find((item) => item.id === selectedId);
+    if (fromInbox) {
+      setEmailContent(fromInbox.content);
+      setSenderEmail(fromInbox.sender);
+      setResult(null);
+      setAlert(null);
+      return;
+    }
+
+    // Check presets
+    const found = EMAIL_PRESETS.find((p) => p.id === selectedId);
     if (found) {
       setEmailContent(found.content);
       setSenderEmail(found.sender);
@@ -80,15 +94,45 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     }
   };
 
-  const handleGoogleConnect = () => {
-    setIsGoogleConnected(true);
-    setSelectedPresetId('bank-kyc');
-    setEmailContent(EMAIL_PRESETS[0].content);
-    setSenderEmail(EMAIL_PRESETS[0].sender);
-    setAlert({
-      type: 'success',
-      message: 'Gmail account connected. Loaded latest suspicious email from inbox.',
-    });
+  const handleGoogleConnect = async () => {
+    setIsConnectingGoogle(true);
+    setAlert(null);
+
+    try {
+      await gmailService.requestAccess();
+      const emails = await gmailService.fetchRecentInboxEmails(5);
+
+      if (emails && emails.length > 0) {
+        setInboxEmails(emails);
+        setIsGoogleConnected(true);
+        setSelectedPresetId(emails[0].id);
+        setEmailContent(emails[0].content);
+        setSenderEmail(emails[0].sender);
+        setAlert({
+          type: 'success',
+          message: `Gmail connected! Successfully loaded ${emails.length} recent inbox emails. Selected latest email for AI analysis.`,
+        });
+      } else {
+        setIsGoogleConnected(true);
+        setAlert({
+          type: 'info',
+          message: 'Connected to Gmail, but no recent emails were found in your INBOX.',
+        });
+      }
+    } catch (err) {
+      console.warn('Gmail OAuth error:', err);
+      // If user closed popup or hasn't authorized yet, fallback to preset
+      setIsGoogleConnected(true);
+      setSelectedPresetId('bank-kyc');
+      setEmailContent(EMAIL_PRESETS[0].content);
+      setSenderEmail(EMAIL_PRESETS[0].sender);
+      setAlert({
+        type: 'warning',
+        message: `${err.message || 'Could not fetch live inbox.'} Loaded realistic threat scenario instead.`,
+      });
+    } finally {
+      setIsConnectingGoogle(false);
+    }
   };
 
   const handleScanEmail = async () => {
@@ -188,6 +232,7 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
                 id="connect-google-btn"
                 className={`btn ${isGoogleConnected ? 'btn-secondary' : 'btn-primary'} connect-google-btn`}
                 onClick={handleGoogleConnect}
+                disabled={isConnectingGoogle}
               >
                 {/* Google G Icon */}
                 <svg className="google-icon" width="16" height="16" viewBox="0 0 24 24">
@@ -208,7 +253,13 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>{isGoogleConnected ? 'Gmail Connected' : 'Connect with Google'}</span>
+                <span>
+                  {isConnectingGoogle
+                    ? 'Connecting to Gmail...'
+                    : isGoogleConnected
+                    ? `Gmail Connected (${inboxEmails.length} emails)`
+                    : 'Connect with Google'}
+                </span>
               </button>
             </div>
           </div>
@@ -231,12 +282,23 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
                 onChange={handleSelectPreset}
                 aria-label="Select an email from inbox"
               >
-                <option value="">Select an email from your inbox...</option>
-                {EMAIL_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
+                <option value="">Select an email to analyse...</option>
+                {inboxEmails.length > 0 && (
+                  <optgroup label="📬 Real Gmail Inbox Emails">
+                    {inboxEmails.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        📩 {item.subject} — {item.sender}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="🛡️ Simulated Threat Scenarios">
+                  {EMAIL_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
