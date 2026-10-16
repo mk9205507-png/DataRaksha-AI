@@ -144,12 +144,12 @@ Implement the core backend endpoints and database persistence layers for Phase 3
 ---
 
 ### ✅ Acceptance Criteria (Backend)
-- [ ] `POST /api/v1/letters/generate` formats legally accurate letters for both DPDP and GDPR.
-- [ ] Background task saves letter records to Supabase when user is authenticated.
-- [ ] `GET /api/v1/history` supports pagination, `scan_type` filter, and `risk_level` filter.
-- [ ] Individual delete and bulk clear history endpoints securely delete records without cross-user leakage.
-- [ ] `GET /api/v1/admin/overview` is protected by `require_admin` role check and returns complete aggregated metrics.
-- [ ] Unit and integration tests pass for all Phase 3 endpoints.
+- [x] `POST /api/v1/letters/generate` formats legally accurate letters for both DPDP and GDPR.
+- [x] Background task saves letter records to Supabase when user is authenticated.
+- [x] `GET /api/v1/history` supports pagination, `scan_type` filter, and `risk_level` filter.
+- [x] Individual delete and bulk clear history endpoints securely delete records without cross-user leakage.
+- [x] `GET /api/v1/admin/overview` is protected by `require_admin` role check and returns complete aggregated metrics.
+- [x] Unit and integration tests pass for all Phase 3 endpoints.
 
 ---
 ---
@@ -241,10 +241,10 @@ Complete and polish the user interface and backend API integration for the three
 ---
 
 ### ✅ Acceptance Criteria (Frontend)
-- [ ] User can customize and generate DPDP and GDPR legal letters with live editable preview.
-- [ ] One-click copy, download (.txt / .md), and mailto actions work seamlessly.
-- [ ] History page fetches authenticated user scan logs and updates upon filtering.
-- [ ] Individual deletion and clear-all actions remove items from UI and sync with backend.
-- [ ] Admin dashboard renders KPI cards, threat distribution visualizers, and health monitors.
-- [ ] Admin route properly restricts unauthorized non-admin users.
-- [ ] Responsive design across desktop, tablet, and mobile with consistent Dark Glassmorphism aesthetics.
+- [x] User can customize and generate DPDP and GDPR legal letters with live editable preview.
+- [x] One-click copy, download (.txt / .md), and mailto actions work seamlessly.
+- [x] History page fetches authenticated user scan logs and updates upon filtering.
+- [x] Individual deletion and clear-all actions remove items from UI and sync with backend.
+- [x] Admin dashboard renders KPI cards, threat distribution visualizers, and health monitors.
+- [x] Admin route properly restricts unauthorized non-admin users.
+- [x] Responsive design across desktop, tablet, and mobile with consistent Dark Glassmorphism aesthetics.

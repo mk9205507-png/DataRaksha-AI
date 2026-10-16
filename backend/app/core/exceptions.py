@@ -4,8 +4,8 @@ from fastapi import HTTPException, status
 class DataRakshaException(HTTPException):
     """Base exception for DataRaksha AI application errors."""
 
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(status_code=status_code, detail=detail)
+    def __init__(self, status_code: int, detail: str, headers: dict | None = None):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
 
 
 class InvalidInputException(DataRakshaException):
@@ -32,8 +32,17 @@ class PayloadTooLargeException(DataRakshaException):
 class RateLimitException(DataRakshaException):
     """Raised when client exceeds request rate threshold (HTTP 429)."""
 
-    def __init__(self, detail: str = "Request limit reached. Please wait a moment."):
-        super().__init__(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
+    def __init__(
+        self,
+        detail: str = "Request limit reached. Please wait a moment.",
+        retry_after: int = 60,
+    ):
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": str(retry_after)},
+        )
+        self.retry_after = retry_after
 
 
 class ServiceUnavailableException(DataRakshaException):

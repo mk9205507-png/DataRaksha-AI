@@ -62,6 +62,8 @@ export const History = ({ user: propUser, onPromptLogin }) => {
       const res = await apiClient.get('/history');
       if (Array.isArray(res.data) && res.data.length > 0) {
         setScans(res.data);
+      } else if (Array.isArray(res.data?.records) && res.data.records.length > 0) {
+        setScans(res.data.records);
       }
     } catch (err) {
       // Retain sample records for offline demo mode

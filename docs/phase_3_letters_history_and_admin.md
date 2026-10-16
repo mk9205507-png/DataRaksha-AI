@@ -135,8 +135,8 @@ Phase 3 develops the should-have features from the DataRaksha AI requirement doc
 ---
 
 ## ✅ Phase 3 Acceptance Criteria
-- [ ] Users can generate both Data Access and Deletion request letters with custom parameters.
-- [ ] Generated letters can be retrieved, edited, and copied to the clipboard.
-- [ ] Authenticated scans appear in the user's history in real-time.
-- [ ] Users can filter their history by scan type and risk severity, and delete entries.
-- [ ] Admin overview endpoint computes accurate aggregates without exposing private user content.
+- [x] Users can generate both Data Access and Deletion request letters with custom parameters.
+- [x] Generated letters can be retrieved, edited, and copied to the clipboard.
+- [x] Authenticated scans appear in the user's history in real-time.
+- [x] Users can filter their history by scan type and risk severity, and delete entries.
+- [x] Admin overview endpoint computes accurate aggregates without exposing private user content.
