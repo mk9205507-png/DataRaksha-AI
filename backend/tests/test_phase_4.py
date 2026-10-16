@@ -136,22 +136,39 @@ def test_malformed_url_syntax_returns_422(invalid_url):
 # Module 3: Sliding-Window Rate Limiting & Retry-After Header (429)
 # ==============================================================================
 
+from unittest.mock import patch, AsyncMock
+
+DUMMY_ANALYSIS = {
+    "scan_type": "message",
+    "risk_level": "Low",
+    "risk_score": 10,
+    "summary": "Mock analysis summary for rate limit testing.",
+    "detected_threats": [],
+    "exposed_pii": [],
+    "recommendations": ["No risks detected."],
+    "disclaimer": MANDATORY_DISCLAIMER,
+}
+
+
 def test_rate_limiter_exceeding_threshold_returns_429_with_retry_after():
     """Verify that exceeding RATE_LIMIT_MAX_REQUESTS returns HTTP 429 and Retry-After header."""
     _rate_limit_records.clear()
 
-    # Exhaust the quota
-    for i in range(RATE_LIMIT_MAX_REQUESTS):
-        res = client.post("/api/v1/scan/message", json={"content": f"Test message {i}"})
-        assert res.status_code == 200
+    with patch("app.api.v1.endpoints.scan.gemini_service.analyze_message", new_callable=AsyncMock) as mock_analyze:
+        mock_analyze.return_value = DUMMY_ANALYSIS
 
-    # 31st request should be throttled
-    throttled = client.post("/api/v1/scan/message", json={"content": "Should be throttled"})
-    assert throttled.status_code == 429
-    assert "Retry-After" in throttled.headers
-    retry_after = int(throttled.headers["Retry-After"])
-    assert 1 <= retry_after <= 60
-    assert "Request limit reached" in throttled.json()["detail"]
+        # Exhaust the quota
+        for i in range(RATE_LIMIT_MAX_REQUESTS):
+            res = client.post("/api/v1/scan/message", json={"content": f"Test message {i}"})
+            assert res.status_code == 200
+
+        # 31st request should be throttled
+        throttled = client.post("/api/v1/scan/message", json={"content": "Should be throttled"})
+        assert throttled.status_code == 429
+        assert "Retry-After" in throttled.headers
+        retry_after = int(throttled.headers["Retry-After"])
+        assert 1 <= retry_after <= 60
+        assert "Request limit reached" in throttled.json()["detail"]
 
 
 def test_rate_limiter_isolated_by_authorization_token():
@@ -161,30 +178,33 @@ def test_rate_limiter_isolated_by_authorization_token():
     user_token_a = "Bearer demo_jwt_token_user_a"
     user_token_b = "Bearer demo_jwt_token_user_b"
 
-    # Exhaust user A's quota
-    for i in range(RATE_LIMIT_MAX_REQUESTS):
-        res = client.post(
+    with patch("app.api.v1.endpoints.scan.gemini_service.analyze_message", new_callable=AsyncMock) as mock_analyze:
+        mock_analyze.return_value = DUMMY_ANALYSIS
+
+        # Exhaust user A's quota
+        for i in range(RATE_LIMIT_MAX_REQUESTS):
+            res = client.post(
+                "/api/v1/scan/message",
+                json={"content": f"User A test message {i}"},
+                headers={"Authorization": user_token_a},
+            )
+            assert res.status_code == 200
+
+        # User A should be throttled
+        res_a_blocked = client.post(
             "/api/v1/scan/message",
-            json={"content": f"User A test message {i}"},
+            json={"content": "User A throttled message"},
             headers={"Authorization": user_token_a},
         )
-        assert res.status_code == 200
+        assert res_a_blocked.status_code == 429
 
-    # User A should be throttled
-    res_a_blocked = client.post(
-        "/api/v1/scan/message",
-        json={"content": "User A throttled message"},
-        headers={"Authorization": user_token_a},
-    )
-    assert res_a_blocked.status_code == 429
-
-    # User B should still be allowed under their own token bucket
-    res_b_ok = client.post(
-        "/api/v1/scan/message",
-        json={"content": "User B independent message"},
-        headers={"Authorization": user_token_b},
-    )
-    assert res_b_ok.status_code == 200
+        # User B should still be allowed under their own token bucket
+        res_b_ok = client.post(
+            "/api/v1/scan/message",
+            json={"content": "User B independent message"},
+            headers={"Authorization": user_token_b},
+        )
+        assert res_b_ok.status_code == 200
 
 
 # ==============================================================================
