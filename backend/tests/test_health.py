@@ -4,7 +4,9 @@ from main import app
 
 client = TestClient(app)
 
-SECRET = "test-secret-key-at-least-32-bytes-long!!"
+from app.core.config import settings
+
+SECRET = settings.SUPABASE_JWT_SECRET or "test-secret-key-at-least-32-bytes-long!!"
 ADMIN_TOKEN = jwt.encode(
     {"sub": "admin-test-id", "email": "admin@dataraksha.ai", "role": "admin"},
     SECRET,

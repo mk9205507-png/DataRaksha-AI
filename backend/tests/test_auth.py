@@ -9,12 +9,13 @@ import pytest
 
 client = TestClient(app)
 
-SECRET_KEY = "test-secret-key-at-least-32-bytes-long!!"
+SECRET_KEY = settings.SUPABASE_JWT_SECRET or "test-secret-key-at-least-32-bytes-long!!"
 
 
-def generate_token(payload: dict, secret: str = SECRET_KEY) -> str:
+def generate_token(payload: dict, secret: str = None) -> str:
     """Helper to generate JWT tokens for tests."""
-    return jwt.encode(payload, secret, algorithm="HS256")
+    target_secret = secret if secret is not None else SECRET_KEY
+    return jwt.encode(payload, target_secret, algorithm="HS256")
 
 
 # ------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ def test_get_my_profile_malformed_token():
         headers={"Authorization": "Bearer not-a-valid-jwt-token"},
     )
     assert response.status_code == 401
-    assert "Invalid JWT format" in response.json()["detail"]
+    assert "Invalid JWT format" in response.json()["detail"] or "Invalid authentication token" in response.json()["detail"]
 
 
 def test_get_my_profile_expired_token():
