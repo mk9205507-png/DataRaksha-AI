@@ -50,8 +50,17 @@ class SafeBrowsingService:
         except Exception:
             raise InvalidURLException("Please enter a valid web address (e.g., https://example.com).")
 
+        if parsed.scheme not in ("http", "https"):
+            raise InvalidURLException("Please enter a valid web address (e.g., https://example.com).")
+
         hostname = (parsed.hostname or "").lower().strip()
-        if not hostname or "." not in hostname:
+        if (
+            not hostname
+            or "." not in hostname
+            or hostname.startswith(".")
+            or hostname.endswith(".")
+            or any(not label for label in hostname.split("."))
+        ):
             raise InvalidURLException("Please enter a valid web address (e.g., https://example.com).")
 
         threats: List[str] = []
