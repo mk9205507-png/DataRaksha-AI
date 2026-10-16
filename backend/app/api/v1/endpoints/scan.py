@@ -11,7 +11,9 @@ from app.models.schemas import (
 )
 from app.core.security import get_current_user_id
 from app.core.exceptions import (
+    DataRakshaException,
     InvalidInputException,
+    InvalidURLException,
     PayloadTooLargeException,
     RateLimitException,
     ServiceUnavailableException,
@@ -26,26 +28,38 @@ MAX_PAYLOAD_LENGTH = 20000
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 30
 
-# In-memory sliding window rate tracker: ip -> list of timestamps
+# In-memory sliding window rate tracker: client_key -> list of timestamps
 _rate_limit_records: Dict[str, List[float]] = defaultdict(list)
 
 
 def check_rate_limit(request: Request):
     """
-    In-memory rate limiter per client IP.
-    Enforces a maximum of 30 requests per 60 seconds.
+    In-memory sliding window rate limiter per client IP or Auth token.
+    Enforces a maximum of 30 requests per 60 seconds with Retry-After header.
     """
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.strip():
+        client_key = f"token:{auth_header.strip()}"
+    else:
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        client_key = f"ip:{client_ip}"
+
     now = time.time()
-    timestamps = _rate_limit_records[client_ip]
+    timestamps = _rate_limit_records[client_key]
 
     # Purge timestamps outside the sliding window
-    _rate_limit_records[client_ip] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    timestamps = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    _rate_limit_records[client_key] = timestamps
 
-    if len(_rate_limit_records[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
-        raise RateLimitException("Request limit reached. Please wait a moment.")
+    if len(timestamps) >= RATE_LIMIT_MAX_REQUESTS:
+        oldest = timestamps[0]
+        retry_after = max(1, int(RATE_LIMIT_WINDOW_SECONDS - (now - oldest)))
+        raise RateLimitException(
+            detail="Request limit reached. Please wait a moment.",
+            retry_after=retry_after,
+        )
 
-    _rate_limit_records[client_ip].append(now)
+    _rate_limit_records[client_key].append(now)
 
 
 def validate_input_length(text: str):
@@ -99,6 +113,8 @@ async def scan_message(
 
     try:
         analysis = await gemini_service.analyze_message(payload.content)
+    except DataRakshaException:
+        raise
     except Exception as exc:
         raise ServiceUnavailableException("Analysis service is temporarily unavailable. Please try again shortly.")
 
@@ -134,11 +150,9 @@ async def scan_link(
 
     try:
         analysis = await safe_browsing_service.check_url(payload.url)
-    except (InvalidInputException, PayloadTooLargeException):
+    except DataRakshaException:
         raise
     except Exception as exc:
-        if "Invalid" in str(type(exc)):
-            raise
         raise ServiceUnavailableException("Analysis service is temporarily unavailable. Please try again shortly.")
 
     background_tasks.add_task(
@@ -173,6 +187,8 @@ async def scan_policy(
 
     try:
         analysis = await gemini_service.simplify_policy(payload.policy_text)
+    except DataRakshaException:
+        raise
     except Exception as exc:
         raise ServiceUnavailableException("Analysis service is temporarily unavailable. Please try again shortly.")
 

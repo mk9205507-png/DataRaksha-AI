@@ -22,7 +22,7 @@ Optimize the FastAPI backend microservices and response payloads to seamlessly s
 ### 🎯 Key Deliverables & Modules
 
 #### 1. Module 1: Response Schema Harmonization for Frontend Visualizers
-- [ ] Ensure all 3 scan endpoints (`/api/v1/scan/message`, `/api/v1/scan/link`, `/api/v1/scan/policy`) return consistent fields expected by the frontend `ResultCard`:
+- [x] Ensure all 3 scan endpoints (`/api/v1/scan/message`, `/api/v1/scan/link`, `/api/v1/scan/policy`) return consistent fields expected by the frontend `ResultCard`:
   - `scan_type`: `message` | `link` | `policy`
   - `risk_level`: `Low` | `Medium` | `High`
   - `risk_score`: Integer (0–100)
@@ -31,33 +31,33 @@ Optimize the FastAPI backend microservices and response payloads to seamlessly s
   - `exposed_pii`: Array of extracted sensitive data tokens
   - `recommendations`: Actionable, non-technical safety steps
   - `disclaimer`: Mandatory digital safety disclaimer
-- [ ] Provide structured fallbacks if external AI or threat intelligence APIs fail or experience high latency.
+- [x] Provide structured fallbacks if external AI or threat intelligence APIs fail or experience high latency.
 
 #### 2. Module 2: Request Sanitization & Size Limit Enforcement
-- [ ] Enforce 20,000 character maximum limit across all text payloads:
+- [x] Enforce 20,000 character maximum limit across all text payloads:
   - Return `413 Payload Too Large` with clear error detail if character limit is exceeded.
-- [ ] URL input normalization on `/api/v1/scan/link`:
+- [x] URL input normalization on `/api/v1/scan/link`:
   - Automatically strip leading/trailing whitespace.
   - Auto-prepend `https://` if protocol is omitted.
   - Reject malformed or invalid URL syntax with `422 Unprocessable Entity` before calling Google Safe Browsing.
 
 #### 3. Module 3: Rate Limiting & Quota Safeguards
-- [ ] Implement rate limiting to protect external Google Gemini and Safe Browsing API quotas:
+- [x] Implement rate limiting to protect external Google Gemini and Safe Browsing API quotas:
   - Add request throttling per IP / user token.
   - Return standard `429 Too Many Requests` status code with `Retry-After` header when rate limits are exceeded.
 
 #### 4. Module 4: CORS Configuration & API Documentation
-- [ ] Verify CORS origins whitelist supports frontend development (`http://localhost:5173`, `http://localhost:3000`) and deployment hosts.
-- [ ] Ensure FastAPI Swagger UI (`/docs`) and ReDoc (`/redoc`) contain up-to-date schema examples matching all Phase 4 endpoints.
+- [x] Verify CORS origins whitelist supports frontend development (`http://localhost:5173`, `http://localhost:3000`) and deployment hosts.
+- [x] Ensure FastAPI Swagger UI (`/docs`) and ReDoc (`/redoc`) contain up-to-date schema examples matching all Phase 4 endpoints.
 
 ---
 
 ### ✅ Acceptance Criteria (Backend)
-- [ ] All scan endpoints return consistent JSON payloads matching the frontend `ResultCard` schema contract.
-- [ ] Character limit validations (413) and URL syntax validations (422) return user-friendly error messages.
-- [ ] Rate limiting triggers `429 Too Many Requests` gracefully under high-frequency requests.
-- [ ] CORS headers allow frontend requests without browser security blocks.
-- [ ] Swagger API documentation at `/docs` accurately reflects all request and response schemas.
+- [x] All scan endpoints return consistent JSON payloads matching the frontend `ResultCard` schema contract.
+- [x] Character limit validations (413) and URL syntax validations (422) return user-friendly error messages.
+- [x] Rate limiting triggers `429 Too Many Requests` gracefully under high-frequency requests.
+- [x] CORS headers allow frontend requests without browser security blocks.
+- [x] Swagger API documentation at `/docs` accurately reflects all request and response schemas.
 
 ---
 ---
