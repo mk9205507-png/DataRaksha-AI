@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FileText,
   Shield,
@@ -41,15 +41,18 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
+  const resultRef = useRef(null);
 
-  const handleSelectPreset = (preset) => {
-    setPolicyText(preset.text);
-    setResult(null);
-    setAlert(null);
-  };
+  useEffect(() => {
+    if (result && resultRef.current) {
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [result]);
 
-  const handleScanPolicy = async () => {
-    const trimmed = policyText.trim();
+  const runPolicyScan = async (textToScan) => {
+    const trimmed = (textToScan || '').trim();
     if (!trimmed) {
       setAlert({
         type: 'warning',
@@ -68,7 +71,6 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
     setIsLoading(true);
     setAlert(null);
-    setResult(null);
 
     try {
       const data = await scanService.scanPolicy(trimmed);
@@ -83,6 +85,16 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSelectPreset = (preset) => {
+    setPolicyText(preset.text);
+    setAlert(null);
+    runPolicyScan(preset.text);
+  };
+
+  const handleScanPolicy = async () => {
+    await runPolicyScan(policyText);
   };
 
   const handleClear = () => {
@@ -194,7 +206,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
           {/* Result Card: Rendered immediately upon analysis */}
           {result && (
-            <div className="policy-result-wrapper">
+            <div className="policy-result-wrapper" ref={resultRef}>
               <ResultCard
                 report={result}
                 onDraftLetter={onNavigateToLetters}

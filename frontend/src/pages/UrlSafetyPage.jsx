@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Link2,
   Globe,
@@ -26,17 +26,18 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
+  const resultRef = useRef(null);
 
-  const handleSelectExample = (url) => {
-    setUrlInput(url);
-    setResult(null);
-    setAlert(null);
-  };
+  useEffect(() => {
+    if (result && resultRef.current) {
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [result]);
 
-  const handleScanUrl = async (e) => {
-    if (e) e.preventDefault();
-
-    const trimmed = urlInput.trim();
+  const runUrlScan = async (targetUrl) => {
+    const trimmed = (targetUrl || '').trim();
     if (!trimmed) {
       setAlert({
         type: 'warning',
@@ -47,7 +48,6 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
     setIsLoading(true);
     setAlert(null);
-    setResult(null);
 
     try {
       const data = await scanService.scanLink(trimmed);
@@ -62,6 +62,17 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSelectExample = (url) => {
+    setUrlInput(url);
+    setAlert(null);
+    runUrlScan(url);
+  };
+
+  const handleScanUrl = async (e) => {
+    if (e) e.preventDefault();
+    await runUrlScan(urlInput);
   };
 
   const handleClear = () => {
@@ -181,7 +192,7 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
         {/* Scan Result Report */}
         {result && (
-          <div className="url-result-container">
+          <div className="url-result-container" ref={resultRef}>
             <ResultCard
               report={result}
               onDraftLetter={onNavigateToLetters}
