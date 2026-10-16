@@ -14,6 +14,7 @@ import {
   Sparkles,
   ShieldCheck,
   UserCheck,
+  User,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +24,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
 
   // Mode: 'login' | 'signup' | 'reset'
   const [mode, setMode] = useState('login');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -38,6 +40,12 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const validateInputs = () => {
     const errors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (mode === 'signup') {
+      if (!fullName.trim()) {
+        errors.fullName = 'Your full name is required.';
+      }
+    }
 
     if (!email.trim()) {
       errors.email = 'Email address is required.';
@@ -79,14 +87,14 @@ export const AuthPage = ({ onAuthSuccess }) => {
       if (mode === 'login') {
         const result = await login({ email, password });
         setAlert({
-          type: 'success',
+          type: result.isDemo ? 'warning' : 'success',
           message: result.isDemo
-            ? `Demo session active as ${result.user.role === 'admin' ? 'Administrator' : 'Individual User'}!`
+            ? `Signed in via Local Demo Mode (${result.user.role === 'admin' ? 'Administrator' : 'Individual User'}). Notice: Supabase credentials in frontend/.env are unconfigured, so this session is not synced to cloud Supabase.`
             : 'Signed in successfully. Welcome back!',
         });
         if (onAuthSuccess) onAuthSuccess(result.user);
       } else if (mode === 'signup') {
-        const result = await signup({ email, password, role });
+        const result = await signup({ fullName: fullName.trim(), email, password, role });
         if (result.requiresEmailVerification) {
           setAlert({
             type: 'success',
@@ -94,10 +102,10 @@ export const AuthPage = ({ onAuthSuccess }) => {
           });
         } else {
           setAlert({
-            type: 'success',
+            type: result.isDemo ? 'warning' : 'success',
             message: result.isDemo
-              ? `Demo account created as ${role === 'admin' ? 'Administrator' : 'Individual User'}!`
-              : 'Account registered successfully!',
+              ? `Welcome ${fullName.trim()}! Created Local Demo Account.`
+              : `Welcome ${fullName.trim()}! Account registered successfully in Supabase!`,
           });
           if (onAuthSuccess) onAuthSuccess(result.user);
         }
@@ -212,6 +220,35 @@ export const AuthPage = ({ onAuthSuccess }) => {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          {/* Full Name Field (Sign Up Only) */}
+          {mode === 'signup' && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="auth-name">
+                Full Name
+              </label>
+              <div className="input-with-icon">
+                <User size={16} className="input-icon" />
+                <input
+                  id="auth-name"
+                  type="text"
+                  className={`input-field with-icon ${fieldErrors.fullName ? 'input-error' : ''}`}
+                  placeholder="e.g. Kalyani More"
+                  value={fullName}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    if (fieldErrors.fullName) setFieldErrors((prev) => ({ ...prev, fullName: null }));
+                  }}
+                  required
+                />
+              </div>
+              {fieldErrors.fullName && (
+                <span className="field-error-message">
+                  <AlertCircle size={12} /> {fieldErrors.fullName}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Email Field */}
           <div className="form-group">
             <label className="form-label" htmlFor="auth-email">

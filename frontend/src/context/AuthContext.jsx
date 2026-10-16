@@ -11,6 +11,27 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Helper to extract or resolve user role
+  // Helper to extract user display name
+  const resolveUserDisplayName = (rawUser) => {
+    if (!rawUser) return 'User';
+    const nameFromMeta = rawUser.user_metadata?.full_name || rawUser.user_metadata?.name;
+    if (nameFromMeta && typeof nameFromMeta === 'string' && nameFromMeta.trim()) {
+      return nameFromMeta.trim();
+    }
+    if (rawUser.full_name && typeof rawUser.full_name === 'string' && rawUser.full_name.trim()) {
+      return rawUser.full_name.trim();
+    }
+    if (rawUser.name && typeof rawUser.name === 'string' && rawUser.name.trim()) {
+      return rawUser.name.trim();
+    }
+    const emailPrefix = (rawUser.email || '').split('@')[0];
+    if (emailPrefix) {
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+    return 'User';
+  };
+
+  // Helper to extract or resolve user role
   const resolveUserRole = (rawUser) => {
     if (!rawUser) return 'individual';
     const roleFromAppMeta = rawUser.app_metadata?.role;
@@ -31,9 +52,11 @@ export const AuthProvider = ({ children }) => {
     if (currentSession && currentSession.user) {
       const activeUser = currentUser || currentSession.user;
       const userRole = resolveUserRole(activeUser);
+      const displayName = resolveUserDisplayName(activeUser);
       const enrichedUser = {
         ...activeUser,
         role: userRole,
+        displayName,
       };
 
       setSession(currentSession);
@@ -45,9 +68,11 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('dataraksha_user', JSON.stringify(enrichedUser));
     } else if (currentUser) {
       const userRole = resolveUserRole(currentUser);
+      const displayName = resolveUserDisplayName(currentUser);
       const enrichedUser = {
         ...currentUser,
         role: userRole,
+        displayName,
       };
 
       setUser(enrichedUser);
@@ -163,13 +188,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Sign up handler
-  const signup = async ({ email, password, role: selectedRole = 'individual' }) => {
+  const signup = async ({ fullName = '', email, password, role: selectedRole = 'individual' }) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
+            full_name: fullName,
             role: selectedRole,
           },
         },
@@ -195,6 +221,8 @@ export const AuthProvider = ({ children }) => {
         const demoUser = {
           id: 'demo-user-' + Math.random().toString(36).substring(2, 9),
           email,
+          full_name: fullName || email.split('@')[0],
+          displayName: fullName || email.split('@')[0],
           role: selectedRole,
           created_at: new Date().toISOString(),
           token: `demo_jwt_token_${selectedRole}_${Date.now()}`,
@@ -265,7 +293,9 @@ export const AuthProvider = ({ children }) => {
     const isTargetAdmin = targetRole === 'admin';
     const demoUser = {
       id: isTargetAdmin ? 'admin-001-sec' : 'user-001-ind',
-      email: isTargetAdmin ? 'admin@dataraksha.ai' : 'sarah.connor@example.com',
+      email: isTargetAdmin ? 'admin@dataraksha.ai' : 'kalyani@example.com',
+      full_name: isTargetAdmin ? 'Security Admin' : 'Kalyani More',
+      displayName: isTargetAdmin ? 'Security Admin' : 'Kalyani More',
       role: isTargetAdmin ? 'admin' : 'individual',
       created_at: new Date().toISOString(),
       token: `demo_jwt_token_${targetRole}_${Date.now()}`,

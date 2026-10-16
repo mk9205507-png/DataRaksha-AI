@@ -8,7 +8,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
 import Alert from './components/common/Alert';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ShieldAlert, Lock, ArrowRight, User } from 'lucide-react';
+import { Shield, ShieldAlert, Lock, ArrowRight, User } from 'lucide-react';
 import './App.css';
 
 function AppContent() {
@@ -16,7 +16,7 @@ function AppContent() {
   const [previousTab, setPreviousTab] = useState('scanner');
   const [globalAlert, setGlobalAlert] = useState(null);
 
-  const { isAuthenticated, isAdmin, user } = useAuth();
+  const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
   // Handle unauthorized event dispatched from API interceptor
   useEffect(() => {
@@ -51,6 +51,24 @@ function AppContent() {
       setActiveTab(previousTab || 'scanner');
     }
   };
+
+  // Initial loading splash screen
+  if (isLoading) {
+    return (
+      <div className="auth-splash-container" id="auth-splash">
+        <div className="auth-splash-card">
+          <div className="brand-logo-glow lg">
+            <Shield className="brand-icon" size={36} />
+          </div>
+          <h2 className="splash-title">
+            DataRaksha <span className="gradient-text">AI</span>
+          </h2>
+          <p className="splash-sub">Verifying encrypted security session...</p>
+          <div className="spinner lg"></div>
+        </div>
+      </div>
+    );
+  }
 
   const renderActiveView = () => {
     switch (activeTab) {

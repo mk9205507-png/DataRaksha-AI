@@ -18,9 +18,7 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
 
   const handleLogout = async () => {
     await logout();
-    if (activeTab === 'admin' || activeTab === 'history') {
-      setActiveTab('scanner');
-    }
+    setActiveTab('scanner');
   };
 
   return (
@@ -78,8 +76,11 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
 
           {isAuthenticated ? (
             <div className="user-profile-badge" id="navbar-user-profile">
+              <div className="user-avatar-circle">
+                {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+              </div>
               <span className="user-email-tag" title={user?.email}>
-                {user?.email || 'Active User'}
+                Welcome, <strong>{user?.displayName || user?.email?.split('@')[0]}</strong>
               </span>
               <span
                 className={`role-pill ${isAdmin ? 'role-pill-admin' : 'role-pill-user'}`}
