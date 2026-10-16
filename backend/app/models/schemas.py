@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Enums ---
@@ -74,16 +74,42 @@ class LetterGenerateRequest(BaseModel):
     company_name: str = Field(..., min_length=1, max_length=200)
     letter_type: LetterType
     recipient_email: Optional[str] = None
-    user_full_name: str = Field(..., min_length=1, max_length=120)
-    user_email: str = Field(..., min_length=3, max_length=120)
+    user_full_name: Optional[str] = None
+    user_name: Optional[str] = None
+    user_email: Optional[str] = ""
+    account_identifier: Optional[str] = None
+    account_id: Optional[str] = None
+    framework: Optional[str] = "DPDP"
+    custom_notes: Optional[str] = None
     custom_details: Optional[str] = None
+
+    @model_validator(mode="after")
+    def populate_fields(self):
+        if not self.user_full_name and self.user_name:
+            self.user_full_name = self.user_name
+        if not self.user_full_name:
+            self.user_full_name = "User"
+        if not self.account_identifier and self.account_id:
+            self.account_identifier = self.account_id
+        if not self.account_id and self.account_identifier:
+            self.account_id = self.account_identifier
+        if not self.custom_notes and self.custom_details:
+            self.custom_notes = self.custom_details
+        if not self.custom_details and self.custom_notes:
+            self.custom_details = self.custom_notes
+        return self
 
 
 class LetterResponse(BaseModel):
+    id: Optional[str] = None
     letter_type: LetterType
+    framework: Optional[str] = "DPDP"
     company_name: str
+    subject: Optional[str] = None
+    body: Optional[str] = None
     content: str
     recipient_email: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 # --- History Schemas ---
@@ -96,6 +122,13 @@ class ScanHistoryItem(BaseModel):
     risk_score: int
     summary: str
     created_at: str
+
+
+class ScanHistoryListResponse(BaseModel):
+    total_records: int
+    page: int
+    limit: int
+    records: List[ScanHistoryItem]
 
 
 # --- User & Auth Schemas (Phase 2) ---
