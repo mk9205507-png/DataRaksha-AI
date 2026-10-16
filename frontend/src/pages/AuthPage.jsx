@@ -1,481 +1,293 @@
 import React, { useState } from 'react';
 import {
-  Lock,
+  User,
   Mail,
-  UserPlus,
-  LogIn,
-  Shield,
+  Lock,
   Eye,
   EyeOff,
-  KeyRound,
-  CheckCircle2,
-  AlertCircle,
-  ArrowLeft,
+  Shield,
+  ArrowRight,
   Sparkles,
-  ShieldCheck,
-  UserCheck,
-  User,
+  RotateCcw,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthPage = ({ onAuthSuccess }) => {
-  const { login, signup, resetPassword, setDemoAuth } = useAuth();
+  const { login } = useAuth();
 
-  // Mode: 'login' | 'signup' | 'reset'
-  const [mode, setMode] = useState('login');
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  // Check if user has signed in before
+  const savedName = localStorage.getItem('dataraksha_person_name') || '';
+  const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
+  const hasSignedInBefore = Boolean(savedName);
+
+  // Form inputs: Name, Email, Password
+  // If signed in before, prefill name and email so they can confirm or change it!
+  const [name, setName] = useState(savedName || 'Kalyani');
+  const [email, setEmail] = useState(savedEmail || (savedName ? 'kalyani@dataraksha.ai' : ''));
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('individual'); // 'individual' | 'admin'
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // Client-side input validation
-  const validateInputs = () => {
+  const validate = () => {
     const errors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (mode === 'signup') {
-      if (!fullName.trim()) {
-        errors.fullName = 'Your full name is required.';
-      }
+    if (!name.trim()) {
+      errors.name = 'Please enter your name.';
     }
 
     if (!email.trim()) {
-      errors.email = 'Email address is required.';
+      errors.email = 'Please enter your email address.';
     } else if (!emailRegex.test(email.trim())) {
-      errors.email = 'Please provide a valid email address (e.g., name@example.com).';
+      errors.email = 'Please enter a valid email address.';
     }
 
-    if (mode !== 'reset') {
-      if (!password) {
-        errors.password = 'Password is required.';
-      } else if (password.length < 6) {
-        errors.password = 'Password must be at least 6 characters long.';
-      }
-    }
-
-    if (mode === 'signup') {
-      if (!confirmPassword) {
-        errors.confirmPassword = 'Confirm your password.';
-      } else if (password !== confirmPassword) {
-        errors.confirmPassword = 'Passwords do not match.';
-      }
+    if (!password) {
+      errors.password = 'Please enter your password.';
+    } else if (password.length < 4) {
+      errors.password = 'Password must be at least 4 characters.';
     }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSignIn = async (e) => {
+    if (e) e.preventDefault();
     setAlert(null);
 
-    if (!validateInputs()) {
+    if (!validate()) {
       return;
     }
 
     setIsLoading(true);
 
     try {
-      if (mode === 'login') {
-        const result = await login({ email, password });
-        setAlert({
-          type: result.isDemo ? 'warning' : 'success',
-          message: result.isDemo
-            ? `Signed in via Local Demo Mode (${result.user.role === 'admin' ? 'Administrator' : 'Individual User'}). Notice: Supabase credentials in frontend/.env are unconfigured, so this session is not synced to cloud Supabase.`
-            : 'Signed in successfully. Welcome back!',
-        });
-        if (onAuthSuccess) onAuthSuccess(result.user);
-      } else if (mode === 'signup') {
-        const result = await signup({ fullName: fullName.trim(), email, password, role });
-        if (result.requiresEmailVerification) {
-          setAlert({
-            type: 'success',
-            message: 'Registration initiated! Please check your inbox to confirm your email address.',
-          });
-        } else {
-          setAlert({
-            type: result.isDemo ? 'warning' : 'success',
-            message: result.isDemo
-              ? `Welcome ${fullName.trim()}! Created Local Demo Account.`
-              : `Welcome ${fullName.trim()}! Account registered successfully in Supabase!`,
-          });
-          if (onAuthSuccess) onAuthSuccess(result.user);
-        }
-      } else if (mode === 'reset') {
-        await resetPassword(email);
-        setAlert({
-          type: 'success',
-          message: 'Password reset link sent! Check your email inbox for instructions.',
-        });
+      const trimmedName = name.trim();
+      // Save name & email so the app always remembers and calls them by name!
+      localStorage.setItem('dataraksha_person_name', trimmedName);
+      localStorage.setItem('dataraksha_saved_email', email.trim());
+
+      const result = await login({
+        name: trimmedName,
+        email: email.trim(),
+        password,
+      });
+
+      const authenticatedUser = {
+        ...result.user,
+        displayName: trimmedName,
+      };
+
+      if (onAuthSuccess) {
+        onAuthSuccess(authenticatedUser);
       }
     } catch (err) {
-      const errorMsg =
-        err.message || 'Authentication operation failed. Please check your credentials and retry.';
-      setAlert({ type: 'error', message: errorMsg });
+      setAlert({
+        type: 'error',
+        message: err.message || 'Authentication failed. Please verify credentials.',
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = (targetRole) => {
-    setAlert(null);
+  // Quick fill helper for testing
+  const handleQuickFill = (fillName, fillEmail) => {
+    setName(fillName);
+    setEmail(fillEmail);
+    setPassword('SecureP@ss2026');
     setFieldErrors({});
-    setDemoAuth(targetRole);
-    setAlert({
-      type: 'success',
-      message: `Signed in instantly via Demo Mode as ${targetRole === 'admin' ? 'Administrator' : 'Individual User'}.`,
-    });
-    if (onAuthSuccess) {
-      onAuthSuccess({
-        email: targetRole === 'admin' ? 'admin@dataraksha.ai' : 'user@example.com',
-        role: targetRole,
-      });
-    }
+    setAlert(null);
   };
 
   return (
-    <div className="auth-page-container" id="auth-view">
-      <div className="auth-card glass-card">
-        {/* Header */}
-        <div className="auth-header">
-          <div className="auth-icon-badge">
-            <Lock size={24} className="text-cyan" />
+    <div className="auth-page-wrapper" id="auth-page-view">
+      <div className="auth-card-panel card">
+        {/* Brand Header */}
+        <div className="auth-brand-header">
+          <div className="auth-shield-icon">
+            <Shield size={28} className="shield-svg" />
           </div>
-          <h2 className="auth-title">
-            {mode === 'login' && 'Welcome Back'}
-            {mode === 'signup' && 'Create DataRaksha Account'}
-            {mode === 'reset' && 'Reset Password'}
-          </h2>
-          <p className="auth-subtitle">
-            {mode === 'login' && 'Access personal scan history and custom privacy deletion letters.'}
-            {mode === 'signup' && 'Join the digital shield to safeguard personal credentials and PII.'}
-            {mode === 'reset' && 'Enter your verified email to receive a password reset link.'}
-          </p>
+
+          {hasSignedInBefore ? (
+            <>
+              <h2 className="auth-main-title">
+                Welcome back, <span className="text-blue">{savedName}</span>!
+              </h2>
+              <p className="auth-sub-title">
+                Confirm your name and credentials below to access your security dashboard.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="auth-main-title">Sign In to DataRaksha AI</h2>
+              <p className="auth-sub-title">
+                Enter your name, email, and password to access your threat protection dashboard.
+              </p>
+            </>
+          )}
         </div>
 
-        {/* Global Alert Notification */}
         {alert && (
-          <Alert
-            type={alert.type}
-            message={alert.message}
-            onClose={() => setAlert(null)}
-          />
-        )}
-
-        {/* Auth Mode Tabs (Login vs Register) */}
-        {mode !== 'reset' ? (
-          <div className="auth-tab-switch" role="tablist">
-            <button
-              type="button"
-              id="auth-tab-login"
-              role="tab"
-              aria-selected={mode === 'login'}
-              className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('login');
-                setAlert(null);
-                setFieldErrors({});
-              }}
-            >
-              <LogIn size={15} /> Sign In
-            </button>
-            <button
-              type="button"
-              id="auth-tab-signup"
-              role="tab"
-              aria-selected={mode === 'signup'}
-              className={`auth-tab-btn ${mode === 'signup' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('signup');
-                setAlert(null);
-                setFieldErrors({});
-              }}
-            >
-              <UserPlus size={15} /> Register
-            </button>
-          </div>
-        ) : (
-          <div className="auth-reset-back-bar">
-            <button
-              type="button"
-              className="btn btn-ghost action-sm back-to-login-btn"
-              onClick={() => {
-                setMode('login');
-                setAlert(null);
-                setFieldErrors({});
-              }}
-            >
-              <ArrowLeft size={14} /> Back to Sign In
-            </button>
+          <div className="auth-alert-box">
+            <Alert
+              type={alert.type}
+              message={alert.message}
+              onClose={() => setAlert(null)}
+            />
           </div>
         )}
 
-        {/* Auth Form */}
-        <form onSubmit={handleSubmit} className="auth-form" noValidate>
-          {/* Full Name Field (Sign Up Only) */}
-          {mode === 'signup' && (
-            <div className="form-group">
-              <label className="form-label" htmlFor="auth-name">
-                Full Name
-              </label>
-              <div className="input-with-icon">
-                <User size={16} className="input-icon" />
-                <input
-                  id="auth-name"
-                  type="text"
-                  className={`input-field with-icon ${fieldErrors.fullName ? 'input-error' : ''}`}
-                  placeholder="e.g. Kalyani More"
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value);
-                    if (fieldErrors.fullName) setFieldErrors((prev) => ({ ...prev, fullName: null }));
-                  }}
-                  required
-                />
-              </div>
-              {fieldErrors.fullName && (
-                <span className="field-error-message">
-                  <AlertCircle size={12} /> {fieldErrors.fullName}
-                </span>
-              )}
+        {/* 3 Input Form: Name, Email, Password */}
+        <form onSubmit={handleSignIn} className="auth-input-form" noValidate>
+          {/* Field 1: Name */}
+          <div className="form-field-group">
+            <label htmlFor="auth-name-input" className="form-label">
+              Your Name
+            </label>
+            <div className={`input-wrapper ${fieldErrors.name ? 'has-error' : ''}`}>
+              <User size={18} className="input-icon text-muted" />
+              <input
+                id="auth-name-input"
+                type="text"
+                className="input-field auth-text-input"
+                placeholder="Enter your name (e.g. Kalyani)"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: null }));
+                }}
+                disabled={isLoading}
+                autoFocus={!hasSignedInBefore}
+              />
             </div>
-          )}
+            {fieldErrors.name && (
+              <span className="field-error-msg">{fieldErrors.name}</span>
+            )}
+          </div>
 
-          {/* Email Field */}
-          <div className="form-group">
-            <label className="form-label" htmlFor="auth-email">
+          {/* Field 2: Email */}
+          <div className="form-field-group">
+            <label htmlFor="auth-email-input" className="form-label">
               Email Address
             </label>
-            <div className="input-with-icon">
-              <Mail size={16} className="input-icon" />
+            <div className={`input-wrapper ${fieldErrors.email ? 'has-error' : ''}`}>
+              <Mail size={18} className="input-icon text-muted" />
               <input
-                id="auth-email"
+                id="auth-email-input"
                 type="email"
-                className={`input-field with-icon ${fieldErrors.email ? 'input-error' : ''}`}
+                className="input-field auth-text-input"
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: null }));
                 }}
-                required
+                disabled={isLoading}
               />
             </div>
             {fieldErrors.email && (
-              <span className="field-error-message">
-                <AlertCircle size={12} /> {fieldErrors.email}
-              </span>
+              <span className="field-error-msg">{fieldErrors.email}</span>
             )}
           </div>
 
-          {/* Role Selection on Sign Up */}
-          {mode === 'signup' && (
-            <div className="form-group">
-              <label className="form-label">Select Account Role</label>
-              <div className="role-selection-grid">
-                <button
-                  type="button"
-                  id="role-select-individual"
-                  className={`role-select-card ${role === 'individual' ? 'selected' : ''}`}
-                  onClick={() => setRole('individual')}
-                >
-                  <UserCheck size={16} className="role-icon" />
-                  <div className="role-info">
-                    <span className="role-title">Individual</span>
-                    <span className="role-desc">Ad-hoc scans & private history</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  id="role-select-admin"
-                  className={`role-select-card ${role === 'admin' ? 'selected' : ''}`}
-                  onClick={() => setRole('admin')}
-                >
-                  <ShieldCheck size={16} className="role-icon" />
-                  <div className="role-info">
-                    <span className="role-title">Admin</span>
-                    <span className="role-desc">System health & global metrics</span>
-                  </div>
-                </button>
-              </div>
+          {/* Field 3: Password */}
+          <div className="form-field-group">
+            <label htmlFor="auth-password-input" className="form-label">
+              Password
+            </label>
+            <div className={`input-wrapper ${fieldErrors.password ? 'has-error' : ''}`}>
+              <Lock size={18} className="input-icon text-muted" />
+              <input
+                id="auth-password-input"
+                type={showPassword ? 'text' : 'password'}
+                className="input-field auth-text-input pr-10"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: null }));
+                }}
+                disabled={isLoading}
+                autoFocus={hasSignedInBefore}
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
-          )}
+            {fieldErrors.password && (
+              <span className="field-error-msg">{fieldErrors.password}</span>
+            )}
+          </div>
 
-          {/* Password Field (for Login and Signup) */}
-          {mode !== 'reset' && (
-            <div className="form-group">
-              <div className="form-label-row">
-                <label className="form-label" htmlFor="auth-password">
-                  Password
-                </label>
-                {mode === 'login' && (
-                  <button
-                    type="button"
-                    className="forgot-password-link"
-                    onClick={() => {
-                      setMode('reset');
-                      setAlert(null);
-                      setFieldErrors({});
-                    }}
-                  >
-                    Forgot Password?
-                  </button>
-                )}
-              </div>
-              <div className="input-with-icon">
-                <Lock size={16} className="input-icon" />
-                <input
-                  id="auth-password"
-                  type={showPassword ? 'text' : 'password'}
-                  className={`input-field with-icon with-password-toggle ${
-                    fieldErrors.password ? 'input-error' : ''
-                  }`}
-                  placeholder="••••••••••••"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password) {
-                      setFieldErrors((prev) => ({ ...prev, password: null }));
-                    }
-                  }}
-                  required
-                />
-                <button
-                  type="button"
-                  id="toggle-password-visibility-btn"
-                  className="password-toggle-btn"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {fieldErrors.password && (
-                <span className="field-error-message">
-                  <AlertCircle size={12} /> {fieldErrors.password}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Confirm Password Field (Sign Up Mode) */}
-          {mode === 'signup' && (
-            <div className="form-group">
-              <label className="form-label" htmlFor="auth-confirm-password">
-                Confirm Password
-              </label>
-              <div className="input-with-icon">
-                <KeyRound size={16} className="input-icon" />
-                <input
-                  id="auth-confirm-password"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  className={`input-field with-icon with-password-toggle ${
-                    fieldErrors.confirmPassword ? 'input-error' : ''
-                  }`}
-                  placeholder="••••••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (fieldErrors.confirmPassword) {
-                      setFieldErrors((prev) => ({ ...prev, confirmPassword: null }));
-                    }
-                  }}
-                  required
-                />
-                <button
-                  type="button"
-                  id="toggle-confirm-password-visibility-btn"
-                  className="password-toggle-btn"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {fieldErrors.confirmPassword && (
-                <span className="field-error-message">
-                  <AlertCircle size={12} /> {fieldErrors.confirmPassword}
-                </span>
-              )}
-
-              {/* Password strength / match cues */}
-              <div className="password-requirements-hints">
-                <span className={`requirement-tag ${password.length >= 6 ? 'met' : ''}`}>
-                  <CheckCircle2 size={12} /> At least 6 characters
-                </span>
-                <span
-                  className={`requirement-tag ${
-                    password && confirmPassword && password === confirmPassword ? 'met' : ''
-                  }`}
-                >
-                  <CheckCircle2 size={12} /> Passwords match
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Submit Action */}
+          {/* Submit Button */}
           <button
-            type="submit"
             id="auth-submit-btn"
-            className="btn btn-primary auth-submit-btn"
+            type="submit"
+            className="btn btn-primary auth-submit-btn w-full"
             disabled={isLoading}
           >
             {isLoading ? (
-              'Processing...'
-            ) : mode === 'login' ? (
-              'Sign In to DataRaksha'
-            ) : mode === 'signup' ? (
-              'Create Free Account'
+              <>
+                <div className="spinner sm" /> Entering Dashboard...
+              </>
             ) : (
-              'Send Password Reset Link'
+              <>
+                <span>Sign In as {name.trim() || 'User'}</span>
+                <ArrowRight size={16} />
+              </>
             )}
           </button>
         </form>
 
-        {/* Quick Demo Credentials Bar (For Reviewers / Pair Developers) */}
-        <div className="auth-demo-section">
-          <div className="demo-section-label">
-            <Sparkles size={13} className="text-cyan" />
-            <span>Developer / Quick Demo Access</span>
-          </div>
-          <div className="demo-actions-grid">
+        {/* Quick Demo Pre-fill Pills */}
+        <div className="auth-quick-fill-section">
+          <span className="quick-fill-label">
+            <Sparkles size={13} /> Quick Sign In Options:
+          </span>
+          <div className="quick-fill-chips">
             <button
               type="button"
-              id="quick-demo-user-btn"
-              className="btn btn-secondary action-sm demo-btn"
-              onClick={() => handleDemoLogin('individual')}
-              title="Quick test as regular user"
+              className="quick-fill-chip"
+              onClick={() => handleQuickFill('Kalyani', 'kalyani@dataraksha.ai')}
             >
-              Demo User
+              Sign In as Kalyani
             </button>
             <button
               type="button"
-              id="quick-demo-admin-btn"
-              className="btn btn-secondary action-sm demo-btn"
-              onClick={() => handleDemoLogin('admin')}
-              title="Quick test with Administrator permissions"
+              className="quick-fill-chip"
+              onClick={() => handleQuickFill('Admin', 'admin@dataraksha.ai')}
             >
-              Demo Admin
+              Sign In as Admin
             </button>
+            {hasSignedInBefore && (
+              <button
+                type="button"
+                className="quick-fill-chip reset-chip"
+                onClick={() => {
+                  setName('');
+                  setEmail('');
+                  setPassword('');
+                  localStorage.removeItem('dataraksha_person_name');
+                  localStorage.removeItem('dataraksha_saved_email');
+                  setFieldErrors({});
+                }}
+                title="Clear saved name"
+              >
+                <RotateCcw size={12} /> Clear Saved Name
+              </button>
+            )}
           </div>
-        </div>
-
-        {/* Privacy & Security Guarantee */}
-        <div className="auth-privacy-guarantee">
-          <Shield size={14} className="text-cyan" />
-          <span>Secured with Supabase Zero-Knowledge Row Level Security</span>
         </div>
       </div>
     </div>

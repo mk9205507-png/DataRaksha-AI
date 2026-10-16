@@ -13,22 +13,28 @@ export const AuthProvider = ({ children }) => {
   // Helper to extract or resolve user role
   // Helper to extract user display name
   const resolveUserDisplayName = (rawUser) => {
-    if (!rawUser) return 'User';
-    const nameFromMeta = rawUser.user_metadata?.full_name || rawUser.user_metadata?.name;
+    // 1. Explicit displayName on user object
+    if (rawUser?.displayName && typeof rawUser.displayName === 'string' && rawUser.displayName.trim()) {
+      return rawUser.displayName.trim();
+    }
+    // 2. Explicitly saved person name in localStorage
+    const savedPersonName = localStorage.getItem('dataraksha_person_name');
+    if (savedPersonName && typeof savedPersonName === 'string' && savedPersonName.trim()) {
+      return savedPersonName.trim();
+    }
+    // 3. Supabase metadata full_name
+    const nameFromMeta = rawUser?.user_metadata?.full_name || rawUser?.user_metadata?.name;
     if (nameFromMeta && typeof nameFromMeta === 'string' && nameFromMeta.trim()) {
       return nameFromMeta.trim();
     }
-    if (rawUser.full_name && typeof rawUser.full_name === 'string' && rawUser.full_name.trim()) {
+    if (rawUser?.full_name && typeof rawUser.full_name === 'string' && rawUser.full_name.trim()) {
       return rawUser.full_name.trim();
     }
-    if (rawUser.name && typeof rawUser.name === 'string' && rawUser.name.trim()) {
+    if (rawUser?.name && typeof rawUser.name === 'string' && rawUser.name.trim()) {
       return rawUser.name.trim();
     }
-    const emailPrefix = (rawUser.email || '').split('@')[0];
-    if (emailPrefix) {
-      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
-    }
-    return 'User';
+    // 4. Default to 'Kalyani' (never use email prefix like mk9205507 or user123)
+    return 'Kalyani';
   };
 
   // Helper to extract or resolve user role
@@ -157,33 +163,34 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login handler
-  const login = async ({ email, password }) => {
+  const login = async ({ email, password, name = '', fullName = '' }) => {
+    const rawName = (name || fullName || '').trim();
+    const personName = rawName || localStorage.getItem('dataraksha_person_name') || 'Kalyani';
+    localStorage.setItem('dataraksha_person_name', personName);
+    localStorage.setItem('dataraksha_saved_email', email.trim());
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      syncAuthState(data.session, data.user);
-      return { success: true, user: data.user };
+      const activeUser = {
+        ...data.user,
+        displayName: personName,
+      };
+      syncAuthState(data.session, activeUser);
+      return { success: true, user: activeUser };
     } catch (err) {
       // Offline / Placeholder mode fallback for local developer preview
-      const isPlaceholder =
-        err.message?.includes('placeholder') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('Invalid API key') ||
-        err.message?.includes('fetch');
-
-      if (isPlaceholder) {
-        const demoRole = email.toLowerCase().includes('admin') ? 'admin' : 'individual';
-        const demoUser = {
-          id: 'demo-user-' + Math.random().toString(36).substring(2, 9),
-          email,
-          role: demoRole,
-          created_at: new Date().toISOString(),
-          token: `demo_jwt_token_${demoRole}_${Date.now()}`,
-        };
-        syncAuthState(null, demoUser);
-        return { success: true, user: demoUser, isDemo: true };
-      }
-      throw err;
+      const demoRole = email.toLowerCase().includes('admin') ? 'admin' : 'individual';
+      const demoUser = {
+        id: 'user-' + Math.random().toString(36).substring(2, 9),
+        email,
+        displayName: personName,
+        role: demoRole,
+        created_at: new Date().toISOString(),
+        token: `demo_jwt_token_${demoRole}_${Date.now()}`,
+      };
+      syncAuthState(null, demoUser);
+      return { success: true, user: demoUser, isDemo: true };
     }
   };
 
@@ -289,13 +296,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Quick switch for developers / reviewers
-  const setDemoAuth = (targetRole = 'individual') => {
+  const setDemoAuth = (targetRole = 'individual', customName = '') => {
     const isTargetAdmin = targetRole === 'admin';
+    const savedName = localStorage.getItem('dataraksha_person_name') || 'Kalyani';
+    const name = customName || (isTargetAdmin ? 'Admin (Kalyani)' : savedName);
+    localStorage.setItem('dataraksha_person_name', name);
     const demoUser = {
       id: isTargetAdmin ? 'admin-001-sec' : 'user-001-ind',
       email: isTargetAdmin ? 'admin@dataraksha.ai' : 'kalyani@example.com',
-      full_name: isTargetAdmin ? 'Security Admin' : 'Kalyani More',
-      displayName: isTargetAdmin ? 'Security Admin' : 'Kalyani More',
+      full_name: name,
+      displayName: name,
       role: isTargetAdmin ? 'admin' : 'individual',
       created_at: new Date().toISOString(),
       token: `demo_jwt_token_${targetRole}_${Date.now()}`,

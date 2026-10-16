@@ -198,6 +198,8 @@ ${formData.user_email}`,
       }
     } catch {
       // Local template generation fallback
+    } finally {
+      setIsGenerating(false);
     }
 
     // High-fidelity local fallback
@@ -214,7 +216,6 @@ ${formData.user_email}`,
       type: 'success',
       message: 'Legal notice generated successfully! You can edit, copy, or download the draft below.',
     });
-    setIsGenerating(false);
   };
 
   return (

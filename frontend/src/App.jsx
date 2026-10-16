@@ -1,21 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/common/Navbar';
-import Footer from './components/common/Footer';
-import Dashboard from './pages/Dashboard';
+import HomePage from './pages/HomePage';
+import EmailSafetyPage from './pages/EmailSafetyPage';
+import UrlSafetyPage from './pages/UrlSafetyPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import DashboardPage from './pages/DashboardPage';
+import AnalysisHistoryPage from './pages/AnalysisHistoryPage';
 import LetterGenerator from './pages/LetterGenerator';
-import History from './pages/History';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
+import Sidebar from './components/common/Sidebar';
 import Alert from './components/common/Alert';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Shield, ShieldAlert, Lock, ArrowRight, User } from 'lucide-react';
+import { Shield, Menu, X, ArrowLeft } from 'lucide-react';
 import './App.css';
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState('scanner');
-  const [previousTab, setPreviousTab] = useState('scanner');
+  // Navigation tabs matching reference design:
+  // 'home' | 'email' | 'url' | 'policy' | 'dashboard' | 'history' | 'letters' | 'admin' | 'auth'
+  const [activeTab, setActiveTab] = useState('home');
+  const [previousTab, setPreviousTab] = useState('home');
   const [globalAlert, setGlobalAlert] = useState(null);
   const [prefilledLetterData, setPrefilledLetterData] = useState(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
@@ -40,24 +46,35 @@ function AppContent() {
     setActiveTab('auth');
   };
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = (authenticatedUser) => {
+    const personName =
+      authenticatedUser?.displayName ||
+      authenticatedUser?.user_metadata?.full_name ||
+      user?.displayName ||
+      '';
     setGlobalAlert({
       type: 'success',
-      message: 'Authentication successful! Welcome to DataRaksha AI.',
+      message: personName
+        ? `Welcome, ${personName}! Your security shield is active.`
+        : 'Authentication successful! Welcome to DataRaksha AI.',
     });
-    // Return to the tab the user was trying to access, or default to scanner
     if (previousTab === 'admin' && !isAdmin) {
-      setActiveTab('scanner');
+      setActiveTab('dashboard');
     } else {
-      setActiveTab(previousTab || 'scanner');
+      setActiveTab('dashboard');
     }
+  };
+
+  const handleNavigateToLetters = (data) => {
+    setPrefilledLetterData(data);
+    setActiveTab('letters');
   };
 
   // Initial loading splash screen
   if (isLoading) {
     return (
       <div className="auth-splash-container" id="auth-splash">
-        <div className="auth-splash-card">
+        <div className="auth-splash-card card">
           <div className="brand-logo-glow lg">
             <Shield className="brand-icon" size={36} />
           </div>
@@ -71,153 +88,148 @@ function AppContent() {
     );
   }
 
-  const renderActiveView = () => {
+  // 1. Home / Landing Page (Reference Screen 1)
+  if (activeTab === 'home') {
+    return (
+      <HomePage
+        onNavigate={(tab) => setActiveTab(tab)}
+        onOpenAuth={handleOpenAuth}
+      />
+    );
+  }
+
+  // 2. Authentication Page
+  if (activeTab === 'auth') {
+    return (
+      <div className="auth-view-wrapper">
+        <div className="auth-back-nav">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setActiveTab(previousTab || 'home')}
+          >
+            <ArrowLeft size={16} /> Back
+          </button>
+        </div>
+        <AuthPage onAuthSuccess={handleAuthSuccess} />
+      </div>
+    );
+  }
+
+  // 3. Inner Application Views (Screens 2 - 6 with Left Sidebar)
+  const renderInnerView = () => {
     switch (activeTab) {
-      case 'letters':
-        return <LetterGenerator user={user} initialData={prefilledLetterData} />;
+      case 'email':
+        return (
+          <EmailSafetyPage
+            onNavigateBack={() => setActiveTab('dashboard')}
+            onNavigateToLetters={handleNavigateToLetters}
+          />
+        );
+
+      case 'url':
+        return (
+          <UrlSafetyPage
+            onNavigateBack={() => setActiveTab('dashboard')}
+            onNavigateToLetters={handleNavigateToLetters}
+          />
+        );
+
+      case 'policy':
+        return (
+          <PrivacyPolicyPage
+            onNavigateBack={() => setActiveTab('dashboard')}
+            onNavigateToLetters={handleNavigateToLetters}
+          />
+        );
+
+      case 'dashboard':
+        return (
+          <DashboardPage
+            onNavigate={(tab) => setActiveTab(tab)}
+            onSelectActivity={(act) => setActiveTab(act.type)}
+          />
+        );
 
       case 'history':
-        if (!isAuthenticated) {
-          return (
-            <div className="protected-route-card glass-card">
-              <div className="protected-icon-badge">
-                <Lock size={28} className="text-cyan" />
-              </div>
-              <h2 className="protected-title">Private Scan History</h2>
-              <p className="protected-subtitle">
-                To guarantee zero cross-tenant leakage and protect your privacy, scan histories are securely encrypted and accessible solely to verified account holders.
-              </p>
-              <div className="protected-actions">
-                <button
-                  type="button"
-                  id="protected-signin-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  <User size={15} /> Sign In to View History
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setActiveTab('scanner')}
-                >
-                  Run Guest Scan
-                </button>
-              </div>
-            </div>
-          );
-        }
-        return <History user={user} onPromptLogin={handleOpenAuth} />;
+        return (
+          <AnalysisHistoryPage
+            onNavigateBack={() => setActiveTab('dashboard')}
+            onReopenScan={(scan) => setActiveTab(scan.scan_type)}
+          />
+        );
+
+      case 'letters':
+        return (
+          <LetterGenerator
+            user={user}
+            initialData={prefilledLetterData}
+          />
+        );
 
       case 'admin':
-        if (!isAuthenticated) {
-          return (
-            <div className="protected-route-card glass-card">
-              <div className="protected-icon-badge error-badge">
-                <ShieldAlert size={28} className="text-red" />
-              </div>
-              <h2 className="protected-title">Administrator Authentication Required</h2>
-              <p className="protected-subtitle">
-                Access to system threat metrics, API health diagnostics, and user telemetry is restricted to authorized System Administrators.
-              </p>
-              <div className="protected-actions">
-                <button
-                  type="button"
-                  id="admin-auth-redirect-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  Sign In with Admin Account <ArrowRight size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setActiveTab('scanner')}
-                >
-                  Return to Threat Scanner
-                </button>
-              </div>
-            </div>
-          );
-        }
+        return (
+          <AdminDashboard
+            user={user}
+            onPromptLogin={handleOpenAuth}
+          />
+        );
 
-        if (!isAdmin) {
-          return (
-            <div className="protected-route-card glass-card">
-              <div className="protected-icon-badge error-badge">
-                <ShieldAlert size={28} className="text-red" />
-              </div>
-              <h2 className="protected-title">403 Forbidden: Administrator Access Required</h2>
-              <p className="protected-subtitle">
-                Your account (<span className="text-cyan">{user?.email}</span>) is currently authenticated with <span className="text-cyan">Individual User</span> permissions. Elevated administrator credentials are required to view this portal.
-              </p>
-              <div className="protected-actions">
-                <button
-                  type="button"
-                  id="switch-to-admin-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  Switch to Admin Account
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setActiveTab('scanner')}
-                >
-                  Return to Threat Scanner
-                </button>
-              </div>
-            </div>
-          );
-        }
-
-        return <AdminDashboard user={user} onPromptLogin={handleOpenAuth} />;
-
-      case 'auth':
-        return <AuthPage onAuthSuccess={handleAuthSuccess} />;
-
-      case 'scanner':
       default:
         return (
-          <Dashboard
-            user={user}
-            onNavigateToLetters={(data) => {
-              setPrefilledLetterData(data);
-              setActiveTab('letters');
-            }}
+          <DashboardPage
+            onNavigate={(tab) => setActiveTab(tab)}
+            onSelectActivity={(act) => setActiveTab(act.type)}
           />
         );
     }
   };
 
   return (
-    <div className="app-shell" id="dataraksha-app">
-      {/* Top Header Navbar */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onOpenAuth={handleOpenAuth}
-      />
-
-      {/* Main Page Workspace */}
-      <main className="main-content">
-        <div className="container view-container">
-          {globalAlert && (
-            <div className="global-alert-wrapper">
-              <Alert
-                type={globalAlert.type}
-                message={globalAlert.message}
-                onClose={() => setGlobalAlert(null)}
-              />
-            </div>
-          )}
-          {renderActiveView()}
+    <div className="inner-app-shell" id="dataraksha-app">
+      {/* Mobile Top Header */}
+      <div className="mobile-header-bar">
+        <div className="landing-brand">
+          <div className="landing-brand-icon sm">
+            <Shield size={18} />
+          </div>
+          <span className="landing-brand-title">DataRaksha AI</span>
         </div>
-      </main>
+        <button
+          type="button"
+          className="mobile-toggle-btn"
+          onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          aria-label="Toggle navigation"
+        >
+          {mobileSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
 
-      {/* Bottom Footer */}
-      <Footer />
+      {/* Left Application Sidebar (Screens 2 - 6) */}
+      <div className={`sidebar-wrapper ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => {
+            setActiveTab(tab);
+            setMobileSidebarOpen(false);
+          }}
+          onOpenAuth={handleOpenAuth}
+        />
+      </div>
+
+      {/* Main Content Workspace */}
+      <main className="inner-main-content">
+        {globalAlert && (
+          <div className="global-alert-wrapper mb-4">
+            <Alert
+              type={globalAlert.type}
+              message={globalAlert.message}
+              onClose={() => setGlobalAlert(null)}
+            />
+          </div>
+        )}
+        {renderInnerView()}
+      </main>
     </div>
   );
 }
