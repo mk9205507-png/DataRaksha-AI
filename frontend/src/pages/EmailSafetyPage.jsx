@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   Mail,
@@ -63,6 +63,35 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [inboxEmails, setInboxEmails] = useState([]);
+  const resultRef = useRef(null);
+
+  // Smooth scroll down to threat risk card whenever result is populated
+  useEffect(() => {
+    if (result && resultRef.current) {
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [result]);
+
+  const runEmailScan = async (contentToScan) => {
+    if (!contentToScan || !contentToScan.trim()) return;
+
+    setIsLoading(true);
+    setAlert(null);
+
+    try {
+      const data = await scanService.scanMessage(contentToScan);
+      setResult(data);
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.response?.data?.detail || 'Failed to complete email threat scan. Please try again.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSelectPreset = (e) => {
     const selectedId = e.target.value;
@@ -79,8 +108,8 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     if (fromInbox) {
       setEmailContent(fromInbox.content);
       setSenderEmail(fromInbox.sender);
-      setResult(null);
       setAlert(null);
+      runEmailScan(fromInbox.content);
       return;
     }
 
@@ -89,8 +118,8 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     if (found) {
       setEmailContent(found.content);
       setSenderEmail(found.sender);
-      setResult(null);
       setAlert(null);
+      runEmailScan(found.content);
     }
   };
 
@@ -110,8 +139,10 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
         setSenderEmail(emails[0].sender);
         setAlert({
           type: 'success',
-          message: `Gmail connected! Successfully loaded ${emails.length} recent inbox emails. Selected latest email for AI analysis.`,
+          message: `Gmail connected! Successfully loaded ${emails.length} recent inbox emails. Analysing latest email below...`,
         });
+        // Automatically analyze the latest email so risk appears down below immediately
+        runEmailScan(emails[0].content);
       } else {
         setIsGoogleConnected(true);
         setAlert({
@@ -121,15 +152,16 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
       }
     } catch (err) {
       console.warn('Gmail OAuth error:', err);
-      // If user closed popup or hasn't authorized yet, fallback to preset
+      // Fallback to realistic threat scenario so user sees working threat risk card
       setIsGoogleConnected(true);
       setSelectedPresetId('bank-kyc');
       setEmailContent(EMAIL_PRESETS[0].content);
       setSenderEmail(EMAIL_PRESETS[0].sender);
       setAlert({
         type: 'warning',
-        message: `${err.message || 'Could not fetch live inbox.'} Loaded realistic threat scenario instead.`,
+        message: `${err.message || 'Could not fetch live inbox.'} Loaded realistic threat scenario for analysis below.`,
       });
+      runEmailScan(EMAIL_PRESETS[0].content);
     } finally {
       setIsConnectingGoogle(false);
     }
@@ -143,22 +175,7 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
       });
       return;
     }
-
-    setIsLoading(true);
-    setAlert(null);
-    setResult(null);
-
-    try {
-      const data = await scanService.scanMessage(emailContent);
-      setResult(data);
-    } catch (err) {
-      setAlert({
-        type: 'error',
-        message: err.response?.data?.detail || 'Failed to complete email threat scan. Please try again.',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    await runEmailScan(emailContent);
   };
 
   const handleClear = () => {
@@ -384,7 +401,7 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
           {/* Result Card: Rendered immediately upon analysis */}
           {result && (
-            <div className="email-result-wrapper">
+            <div className="email-result-wrapper" ref={resultRef}>
               <ResultCard
                 report={result}
                 onDraftLetter={onNavigateToLetters}
