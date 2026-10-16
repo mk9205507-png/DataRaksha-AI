@@ -29,8 +29,10 @@ class SupabaseService:
 
     async def save_scan_history(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Persists a scan record to scan_history table."""
-        if not self._client:
-            logger.debug(f"[Mock DB] Saved scan: {record.get('scan_type')}")
+        user_id = str(record.get("user_id") or "")
+        # For local demo accounts, avoid inserting to Supabase table to prevent foreign key errors with profiles
+        if not self._client or user_id.startswith("00000000-0000-0000-0000-") or "demo" in user_id:
+            logger.debug(f"[Mock DB] Saved scan for user {user_id}: {record.get('scan_type')}")
             return record
 
         try:
@@ -42,8 +44,19 @@ class SupabaseService:
 
     async def get_user_scans(self, user_id: str) -> List[Dict[str, Any]]:
         """Retrieves past scan entries for authenticated user."""
-        if not self._client:
-            return []
+        if not self._client or str(user_id).startswith("00000000-0000-0000-0000-") or "demo" in str(user_id):
+            return [
+                {
+                    "id": "demo-sc-1",
+                    "user_id": user_id,
+                    "scan_type": "message",
+                    "input_preview": "URGENT: Your State Bank account has been suspended...",
+                    "risk_level": "High",
+                    "risk_score": 88,
+                    "summary": "Phishing urgency cues and banking impersonation detected.",
+                    "created_at": "2026-10-16T10:00:00Z",
+                }
+            ]
 
         try:
             res = (

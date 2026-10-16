@@ -8,15 +8,14 @@ import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
 import Alert from './components/common/Alert';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ShieldAlert, Lock, ArrowRight, User } from 'lucide-react';
+import { Shield, ShieldAlert } from 'lucide-react';
 import './App.css';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('scanner');
-  const [previousTab, setPreviousTab] = useState('scanner');
   const [globalAlert, setGlobalAlert] = useState(null);
 
-  const { isAuthenticated, isAdmin, user } = useAuth();
+  const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
   // Handle unauthorized event dispatched from API interceptor
   useEffect(() => {
@@ -25,7 +24,6 @@ function AppContent() {
         type: 'warning',
         message: e.detail?.message || 'Session expired. Please sign in again.',
       });
-      setActiveTab('auth');
     };
 
     window.addEventListener('dataraksha:unauthorized', handleUnauthorized);
@@ -34,94 +32,93 @@ function AppContent() {
     };
   }, []);
 
-  const handleOpenAuth = () => {
-    setPreviousTab(activeTab);
-    setActiveTab('auth');
-  };
-
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = (authUser) => {
+    const name =
+      authUser?.displayName ||
+      authUser?.user_metadata?.full_name ||
+      authUser?.full_name ||
+      authUser?.email?.split('@')[0] ||
+      'User';
     setGlobalAlert({
       type: 'success',
-      message: 'Authentication successful! Welcome to DataRaksha AI.',
+      message: `Welcome back, ${name}! Digital risk shield initialized.`,
     });
-    // Return to the tab the user was trying to access, or default to scanner
-    if (previousTab === 'admin' && !isAdmin) {
-      setActiveTab('scanner');
-    } else {
-      setActiveTab(previousTab || 'scanner');
-    }
+    setActiveTab('scanner');
   };
 
+  // 1. Initial Loading State while checking Supabase session
+  if (isLoading) {
+    return (
+      <div className="auth-splash-container" id="auth-splash">
+        <div className="auth-splash-card">
+          <div className="brand-logo-glow lg">
+            <Shield className="brand-icon" size={36} />
+          </div>
+          <h2 className="splash-title">
+            DataRaksha <span className="gradient-text">AI</span>
+          </h2>
+          <p className="splash-sub">Verifying encrypted security session...</p>
+          <div className="spinner lg"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated Portal: Displays dedicated Sign In & Registration Suite
+  if (!isAuthenticated) {
+    return (
+      <div className="app-shell" id="dataraksha-auth-shell">
+        <header className="navbar-header" id="auth-header">
+          <div className="container nav-container auth-nav-container">
+            <div className="nav-brand" role="banner">
+              <div className="brand-logo-glow">
+                <Shield className="brand-icon" size={24} />
+              </div>
+              <div className="brand-text">
+                <span className="brand-title">
+                  DataRaksha <span className="gradient-text">AI</span>
+                </span>
+                <span className="brand-tagline">Digital Risk Protection</span>
+              </div>
+            </div>
+
+            <div className="system-status-indicator" title="Threat Protection Engines Operational">
+              <span className="status-dot"></span>
+              <span className="status-text">Cloud Security Shield Active</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="main-content auth-page-wrapper">
+          <div className="container">
+            {globalAlert && (
+              <div className="global-alert-wrapper">
+                <Alert
+                  type={globalAlert.type}
+                  message={globalAlert.message}
+                  onClose={() => setGlobalAlert(null)}
+                />
+              </div>
+            )}
+            <AuthPage onAuthSuccess={handleAuthSuccess} />
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    );
+  }
+
+  // 3. Authenticated Application Workspace
   const renderActiveView = () => {
     switch (activeTab) {
       case 'letters':
         return <LetterGenerator />;
 
       case 'history':
-        if (!isAuthenticated) {
-          return (
-            <div className="protected-route-card glass-card">
-              <div className="protected-icon-badge">
-                <Lock size={28} className="text-cyan" />
-              </div>
-              <h2 className="protected-title">Private Scan History</h2>
-              <p className="protected-subtitle">
-                To guarantee zero cross-tenant leakage and protect your privacy, scan histories are securely encrypted and accessible solely to verified account holders.
-              </p>
-              <div className="protected-actions">
-                <button
-                  type="button"
-                  id="protected-signin-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  <User size={15} /> Sign In to View History
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setActiveTab('scanner')}
-                >
-                  Run Guest Scan
-                </button>
-              </div>
-            </div>
-          );
-        }
         return <History />;
 
       case 'admin':
-        if (!isAuthenticated) {
-          return (
-            <div className="protected-route-card glass-card">
-              <div className="protected-icon-badge error-badge">
-                <ShieldAlert size={28} className="text-red" />
-              </div>
-              <h2 className="protected-title">Administrator Authentication Required</h2>
-              <p className="protected-subtitle">
-                Access to system threat metrics, API health diagnostics, and user telemetry is restricted to authorized System Administrators.
-              </p>
-              <div className="protected-actions">
-                <button
-                  type="button"
-                  id="admin-auth-redirect-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  Sign In with Admin Account <ArrowRight size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setActiveTab('scanner')}
-                >
-                  Return to Threat Scanner
-                </button>
-              </div>
-            </div>
-          );
-        }
-
         if (!isAdmin) {
           return (
             <div className="protected-route-card glass-card">
@@ -135,14 +132,6 @@ function AppContent() {
               <div className="protected-actions">
                 <button
                   type="button"
-                  id="switch-to-admin-btn"
-                  className="btn btn-primary"
-                  onClick={handleOpenAuth}
-                >
-                  Switch to Admin Account
-                </button>
-                <button
-                  type="button"
                   className="btn btn-secondary"
                   onClick={() => setActiveTab('scanner')}
                 >
@@ -152,11 +141,7 @@ function AppContent() {
             </div>
           );
         }
-
         return <AdminDashboard />;
-
-      case 'auth':
-        return <AuthPage onAuthSuccess={handleAuthSuccess} />;
 
       case 'scanner':
       default:
@@ -166,11 +151,10 @@ function AppContent() {
 
   return (
     <div className="app-shell" id="dataraksha-app">
-      {/* Top Header Navbar */}
+      {/* Top Header Navbar with user profile & navigation tabs */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onOpenAuth={handleOpenAuth}
       />
 
       {/* Main Page Workspace */}
