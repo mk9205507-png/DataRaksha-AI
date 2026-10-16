@@ -15,6 +15,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('scanner');
   const [previousTab, setPreviousTab] = useState('scanner');
   const [globalAlert, setGlobalAlert] = useState(null);
+  const [prefilledLetterData, setPrefilledLetterData] = useState(null);
 
   const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
@@ -73,7 +74,7 @@ function AppContent() {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'letters':
-        return <LetterGenerator user={user} />;
+        return <LetterGenerator user={user} initialData={prefilledLetterData} />;
 
       case 'history':
         if (!isAuthenticated) {
@@ -178,7 +179,15 @@ function AppContent() {
 
       case 'scanner':
       default:
-        return <Dashboard user={user} />;
+        return (
+          <Dashboard
+            user={user}
+            onNavigateToLetters={(data) => {
+              setPrefilledLetterData(data);
+              setActiveTab('letters');
+            }}
+          />
+        );
     }
   };
 

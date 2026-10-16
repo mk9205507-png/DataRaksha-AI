@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -6,12 +6,20 @@ import {
   Info,
   KeyRound,
   ShieldAlert,
+  Copy,
+  Check,
+  FileText,
+  ExternalLink,
+  ChevronRight,
 } from 'lucide-react';
 
 const MANDATORY_DISCLAIMER =
   'No obvious risks were detected; however, this does not guarantee the content is completely safe. Always exercise caution when sharing sensitive information online.';
 
-export const ResultCard = ({ report }) => {
+export const ResultCard = ({ report, onDraftLetter }) => {
+  const [copiedReport, setCopiedReport] = useState(false);
+  const [copiedRecIndex, setCopiedRecIndex] = useState(null);
+
   if (!report) return null;
 
   // Derive risk level and score with safe fallbacks
@@ -45,6 +53,7 @@ export const ResultCard = ({ report }) => {
           badgeClass: 'risk-badge risk-badge-high',
           fillClass: 'risk-fill-high',
           borderColor: '#EF4444',
+          glowColor: 'rgba(239, 68, 68, 0.25)',
           guidance: 'Immediate threat detected. Avoid clicking links, downloading attachments, or submitting credentials.',
         };
       case 'Medium':
@@ -55,6 +64,7 @@ export const ResultCard = ({ report }) => {
           badgeClass: 'risk-badge risk-badge-medium',
           fillClass: 'risk-fill-medium',
           borderColor: '#F59E0B',
+          glowColor: 'rgba(245, 158, 11, 0.25)',
           guidance: 'Suspicious cues identified. Exercise caution and verify sender or website identity.',
         };
       default:
@@ -65,6 +75,7 @@ export const ResultCard = ({ report }) => {
           badgeClass: 'risk-badge risk-badge-low',
           fillClass: 'risk-fill-low',
           borderColor: '#10B981',
+          glowColor: 'rgba(16, 185, 129, 0.25)',
           guidance: 'No critical threats detected. Maintain standard digital vigilance.',
         };
     }
@@ -72,13 +83,73 @@ export const ResultCard = ({ report }) => {
 
   const riskDetails = getRiskDetails();
 
+  // Copy full threat assessment report
+  const handleCopyReport = async () => {
+    const reportText = `=== DataRaksha AI Threat Assessment Report ===
+Risk Level: ${risk_level} (${risk_score}/100)
+Summary: ${summary}
+
+Detected Threats:
+${detected_threats.map((t) => `- ${typeof t === 'object' ? t.description || t.category : t}`).join('\n') || '- None'}
+
+Exposed PII:
+${exposed_pii.map((p) => `- ${typeof p === 'object' ? `${p.type}: ${p.value}` : p}`).join('\n') || '- None'}
+
+Actionable Recommendations:
+${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n') || '- None'}
+
+Official Disclaimer:
+${disclaimer}`;
+
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 2500);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleCopyRecommendation = async (text, idx) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedRecIndex(idx);
+      setTimeout(() => setCopiedRecIndex(null), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Helper to extract company name from threats or summary
+  const getDetectedEntity = () => {
+    if (report.target_company) return report.target_company;
+    // Check if summary mentions a brand
+    const commonBrands = ['State Bank', 'SBI', 'Amazon', 'Google', 'Meta', 'Facebook', 'Microsoft', 'Flipkart', 'PayPal', 'Netflix'];
+    for (const b of commonBrands) {
+      if (summary.includes(b) || (report.content || '').includes(b)) {
+        return b;
+      }
+    }
+    return '';
+  };
+
+  const detectedEntity = getDetectedEntity();
+
+  // SVG Gauge Calculations
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (risk_score / 100) * circumference;
+
   return (
     <div
       className="report-card glass-card"
       id="scan-result-card"
-      style={{ borderLeftColor: riskDetails.borderColor }}
+      style={{
+        borderLeftColor: riskDetails.borderColor,
+        boxShadow: `0 8px 32px 0 ${riskDetails.glowColor}`,
+      }}
     >
-      {/* Header section with Risk Rating & Score Meter */}
+      {/* Top Header section with Risk Rating & Circular Threat Gauge */}
       <div className="report-header">
         <div className="report-badge-container">
           {riskDetails.icon}
@@ -101,19 +172,65 @@ export const ResultCard = ({ report }) => {
           </div>
         </div>
 
-        {/* Visual score meter bar */}
-        <div className="score-meter-wrapper">
-          <div className="score-meter-meta">
-            <span className="meter-label">Threat Meter</span>
-            <span className="meter-pct">{risk_score}%</span>
-          </div>
-          <div className="score-meter-bar" aria-label={`Risk score ${risk_score} out of 100`}>
-            <div
-              className={`score-meter-fill ${riskDetails.fillClass}`}
-              style={{ width: `${Math.max(6, risk_score)}%` }}
-            ></div>
+        {/* Circular SVG Threat Score Gauge */}
+        <div className="circular-gauge-container">
+          <svg className="circular-gauge" width="100" height="100" viewBox="0 0 100 100">
+            <circle
+              className="gauge-bg"
+              cx="50"
+              cy="50"
+              r={radius}
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="8"
+              fill="transparent"
+            />
+            <circle
+              className="gauge-fill"
+              cx="50"
+              cy="50"
+              r={radius}
+              stroke={riskDetails.color}
+              strokeWidth="8"
+              fill="transparent"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              transform="rotate(-90 50 50)"
+            />
+          </svg>
+          <div className="gauge-center-text">
+            <span className="gauge-score-number" style={{ color: riskDetails.color }}>
+              {risk_score}
+            </span>
+            <span className="gauge-score-label">/ 100</span>
           </div>
         </div>
+      </div>
+
+      {/* Cross-Module Quick Actions Bar */}
+      <div className="report-quick-actions-bar">
+        <button
+          type="button"
+          className="btn btn-secondary action-sm copy-report-btn"
+          onClick={handleCopyReport}
+          title="Copy full threat evaluation report to clipboard"
+        >
+          {copiedReport ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+          <span>{copiedReport ? 'Report Copied!' : 'Copy Full Report'}</span>
+        </button>
+
+        {onDraftLetter && (
+          <button
+            type="button"
+            className="btn btn-primary action-sm draft-notice-btn"
+            onClick={() => onDraftLetter(detectedEntity || 'Target Organization', summary)}
+            title="Open Data Request Letter Studio to draft a formal erasure notice"
+          >
+            <FileText size={14} />
+            <span>Draft Statutory Deletion Notice</span>
+            <ChevronRight size={13} />
+          </button>
+        )}
       </div>
 
       {/* Plain Language Summary Banner */}
@@ -189,6 +306,14 @@ export const ResultCard = ({ report }) => {
               <li key={index} className="recommendation-item">
                 <span className="recommendation-index">{index + 1}</span>
                 <span className="recommendation-text">{step}</span>
+                <button
+                  type="button"
+                  className="rec-copy-btn"
+                  onClick={() => handleCopyRecommendation(step, index)}
+                  title="Copy this recommendation"
+                >
+                  {copiedRecIndex === index ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                </button>
               </li>
             ))}
           </ul>
@@ -211,4 +336,3 @@ export const ResultCard = ({ report }) => {
 };
 
 export default ResultCard;
-
