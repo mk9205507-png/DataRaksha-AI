@@ -49,25 +49,31 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
     if (!isAdmin) return;
     setIsLoading(true);
     try {
-      const res = await apiClient.get('/admin/metrics');
-      if (res.data) {
+      let res;
+      try {
+        res = await apiClient.get('/admin/overview');
+      } catch {
+        res = await apiClient.get('/admin/metrics');
+      }
+      if (res && res.data) {
         setMetrics((prev) => ({
           ...prev,
-          scans_today: res.data.total_scans_today ?? prev.scans_today,
+          ...res.data,
+          scans_today: res.data.scans_today ?? res.data.total_scans_today ?? prev.scans_today,
           risk_breakdown: {
             ...prev.risk_breakdown,
-            high: res.data.high_risk_flagged ?? prev.risk_breakdown.high,
+            ...(res.data.risk_breakdown || {}),
+            high: res.data.risk_breakdown?.high ?? res.data.high_risk_flagged ?? prev.risk_breakdown.high,
           },
           system_status: {
             ...prev.system_status,
+            ...(res.data.system_status || {}),
             gemini_api:
-              res.data.gemini_engine_status === 'connected'
-                ? 'Operational (Latency 320ms)'
-                : prev.system_status.gemini_api,
+              res.data.system_status?.gemini_api ||
+              (res.data.gemini_engine_status === 'connected' ? 'Operational (Latency 320ms)' : prev.system_status.gemini_api),
             safe_browsing_api:
-              res.data.safe_browsing_status === 'connected'
-                ? 'Operational (Quota healthy)'
-                : prev.system_status.safe_browsing_api,
+              res.data.system_status?.safe_browsing_api ||
+              (res.data.safe_browsing_status === 'connected' ? 'Operational (Quota healthy)' : prev.system_status.safe_browsing_api),
           },
         }));
         setLastRefreshed(new Date().toLocaleTimeString());
