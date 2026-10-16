@@ -1,5 +1,5 @@
 @import './variables.css';
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ==========================================================================
    CSS Reset & Base Rules
@@ -13,7 +13,7 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -21,32 +21,9 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
-  line-height: 1.6;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image: 
-    radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 25%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
-    radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
-  background-attachment: fixed;
-}
-
-/* ==========================================================================
-   Layout & Container
-   ========================================================================== */
-.container {
-  width: 100%;
-  max-width: var(--max-width-container);
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: var(--spacing-6);
-  padding-right: var(--spacing-6);
-}
-
-.main-content {
-  padding-top: calc(var(--nav-height) + var(--spacing-8));
-  padding-bottom: var(--spacing-12);
-  min-height: calc(100vh - var(--nav-height));
 }
 
 /* ==========================================================================
@@ -55,44 +32,39 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-family-display);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
   line-height: 1.25;
 }
 
-h1 { font-size: clamp(2rem, 4vw, 2.75rem); }
-h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
-h3 { font-size: 1.35rem; }
+h1 { font-size: clamp(2rem, 3.5vw, 2.75rem); }
+h2 { font-size: clamp(1.4rem, 2.5vw, 1.85rem); }
+h3 { font-size: 1.25rem; }
 
 p {
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .gradient-text {
-  background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--brand-primary);
   display: inline-block;
 }
 
 /* ==========================================================================
-   Card & Glassmorphic Surfaces
+   Card & Panel Surfaces
    ========================================================================== */
-.glass-card {
-  background: var(--bg-card);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
+.card, .glass-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--spacing-6);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-card);
   transition: all var(--transition-normal);
 }
 
-.glass-card:hover {
-  border-color: var(--glass-border-hover);
-  box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
-  transform: translateY(-2px);
+.card:hover, .glass-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--shadow-md);
 }
 
 /* ==========================================================================
@@ -101,34 +73,31 @@ p {
 .risk-badge {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-1) var(--spacing-3);
+  gap: var(--spacing-1);
+  padding: 4px 10px;
   border-radius: var(--radius-full);
   font-size: var(--font-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
 }
 
 .risk-badge-low {
   background: var(--risk-low-bg);
-  color: var(--risk-low);
+  color: var(--risk-low-text);
   border: 1px solid var(--risk-low-border);
-  box-shadow: 0 0 12px var(--risk-low-glow);
 }
 
 .risk-badge-medium {
   background: var(--risk-medium-bg);
-  color: var(--risk-medium);
+  color: var(--risk-medium-text);
   border: 1px solid var(--risk-medium-border);
-  box-shadow: 0 0 12px var(--risk-medium-glow);
 }
 
 .risk-badge-high {
   background: var(--risk-high-bg);
-  color: var(--risk-high);
+  color: var(--risk-high-text);
   border: 1px solid var(--risk-high-border);
-  box-shadow: 0 0 12px var(--risk-high-glow);
 }
 
 /* ==========================================================================
@@ -139,13 +108,13 @@ p {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-5);
+  padding: 10px 18px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   border-radius: var(--radius-md);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: all var(--transition-fast);
   text-decoration: none;
   user-select: none;
 }
@@ -155,37 +124,37 @@ p {
 }
 
 .btn-primary {
-  background: var(--brand-gradient);
-  color: #ffffff;
-  box-shadow: var(--shadow-md), var(--shadow-glow-cyan);
+  background: var(--brand-primary);
+  color: var(--text-white);
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
 }
 
 .btn-primary:hover {
-  background: var(--brand-gradient-hover);
-  box-shadow: var(--shadow-lg), 0 0 25px rgba(6, 182, 212, 0.45);
-  transform: translateY(-1px);
+  background: var(--brand-primary-hover);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+  color: var(--text-white);
 }
 
 .btn-secondary {
-  background: var(--bg-tertiary);
+  background: var(--bg-surface);
   color: var(--text-primary);
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border-default);
 }
 
 .btn-secondary:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--glass-border-hover);
-  color: var(--brand-cyan);
+  background: var(--bg-surface-hover);
+  border-color: #cbd5e1;
+  color: var(--brand-primary);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+  background: var(--bg-surface-active);
+  color: var(--brand-primary);
 }
 
 /* ==========================================================================
@@ -194,9 +163,9 @@ p {
 .input-field, .textarea-field {
   width: 100%;
   background: var(--bg-input);
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: var(--spacing-3) var(--spacing-4);
+  padding: 10px 14px;
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -205,8 +174,12 @@ p {
 }
 
 .input-field:focus, .textarea-field:focus {
-  border-color: var(--brand-cyan);
-  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.input-field::placeholder, .textarea-field::placeholder {
+  color: var(--text-subtle);
 }
 
 .textarea-field {
@@ -218,16 +191,16 @@ p {
    Scrollbars
    ========================================================================== */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+  background: #cbd5e1;
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--brand-cyan);
+  background: #94a3b8;
 }
