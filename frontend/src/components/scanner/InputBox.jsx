@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clipboard, Trash2, ShieldAlert, Sparkles, AlertTriangle } from 'lucide-react';
+import { Clipboard, Trash2, ShieldAlert, Sparkles, AlertTriangle, Activity } from 'lucide-react';
 
 const MAX_CHAR_LIMIT = 20000;
 const WARNING_THRESHOLD = 18000;
@@ -14,9 +14,9 @@ export const InputBox = ({
   onLoadSample,
 }) => {
   const placeholders = {
-    message: 'Paste SMS, email, or chat message...',
-    link: 'Enter web address e.g., https://example.com',
-    policy: 'Paste terms of service or privacy policy text...',
+    message: 'Paste SMS, WhatsApp text, email, or chat message to analyze for phishing and fraud...',
+    link: 'Enter web address (e.g., https://example.com or suspicious redirect domain)...',
+    policy: 'Paste corporate privacy policy or terms of service text to extract data broker monetization clauses...',
   };
 
   const charCount = value ? value.length : 0;
@@ -35,7 +35,17 @@ export const InputBox = ({
   };
 
   return (
-    <div className="scanner-input-container glass-card" id="scanner-input-box">
+    <div
+      className={`scanner-input-container glass-card ${isLoading ? 'is-scanning-active' : ''}`}
+      id="scanner-input-box"
+    >
+      {/* Scanning Radar Micro-Animation Beam */}
+      {isLoading && (
+        <div className="scanner-radar-beam" aria-hidden="true">
+          <div className="radar-glow-line"></div>
+        </div>
+      )}
+
       <div className="input-header">
         <label htmlFor="scanner-input" className="input-label">
           {scanType === 'message' && 'Message / Email Content'}
@@ -78,31 +88,35 @@ export const InputBox = ({
       </div>
 
       {scanType === 'link' ? (
-        <input
-          id="scanner-input"
-          type="url"
-          className={`input-field url-input ${isOverLimit ? 'input-error' : ''}`}
-          placeholder={placeholders.link}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={isLoading}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              onSubmit();
-            }
-          }}
-        />
+        <div className="input-field-relative">
+          <input
+            id="scanner-input"
+            type="url"
+            className={`input-field url-input ${isOverLimit ? 'input-error' : ''} ${isLoading ? 'input-scanning' : ''}`}
+            placeholder={placeholders.link}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={isLoading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+          />
+        </div>
       ) : (
-        <textarea
-          id="scanner-input"
-          className={`textarea-field scanner-textarea ${isOverLimit ? 'input-error' : ''}`}
-          placeholder={placeholders[scanType]}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={6}
-          disabled={isLoading}
-        />
+        <div className="input-field-relative">
+          <textarea
+            id="scanner-input"
+            className={`textarea-field scanner-textarea ${isOverLimit ? 'input-error' : ''} ${isLoading ? 'input-scanning' : ''}`}
+            placeholder={placeholders[scanType]}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            rows={7}
+            disabled={isLoading}
+          />
+        </div>
       )}
 
       <div className="input-footer">
@@ -125,14 +139,14 @@ export const InputBox = ({
         <button
           id="run-scan-btn"
           type="button"
-          className="btn btn-primary scan-submit-btn"
+          className={`btn btn-primary scan-submit-btn ${isLoading ? 'btn-scanning' : ''}`}
           onClick={onSubmit}
           disabled={isLoading || !value.trim() || isOverLimit}
         >
           {isLoading ? (
             <>
               <span className="spinner"></span>
-              <span>Analyzing Threat Vector...</span>
+              <span>Running Deep Threat Analysis...</span>
             </>
           ) : (
             <>
@@ -147,4 +161,3 @@ export const InputBox = ({
 };
 
 export default InputBox;
-

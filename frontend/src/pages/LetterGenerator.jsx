@@ -6,19 +6,19 @@ import { FileText, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import apiClient from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
-export const LetterGenerator = ({ user: propUser }) => {
+export const LetterGenerator = ({ user: propUser, initialData }) => {
   const { user: authUser } = useAuth();
   const currentUser = propUser || authUser;
 
   const [formData, setFormData] = useState({
     letter_type: 'deletion',
     framework: 'DPDP',
-    company_name: '',
+    company_name: initialData?.company_name || '',
     recipient_email: '',
     user_name: '',
     user_email: '',
     account_id: '',
-    custom_notes: '',
+    custom_notes: initialData?.custom_notes || initialData?.notes || '',
   });
 
   const [generatedLetter, setGeneratedLetter] = useState('');
@@ -42,6 +42,17 @@ export const LetterGenerator = ({ user: propUser }) => {
       }));
     }
   }, [currentUser]);
+
+  // Update if initialData changes dynamically
+  useEffect(() => {
+    if (initialData) {
+      setFormData((prev) => ({
+        ...prev,
+        company_name: initialData.company_name || prev.company_name,
+        custom_notes: initialData.custom_notes || initialData.notes || prev.custom_notes,
+      }));
+    }
+  }, [initialData]);
 
   const generateLocalDraft = () => {
     const currentDate = new Date().toLocaleDateString('en-US', {

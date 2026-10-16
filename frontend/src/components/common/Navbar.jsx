@@ -1,9 +1,10 @@
-import React from 'react';
-import { Shield, FileText, History, BarChart3, User, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, FileText, History, BarChart3, User, LogOut, Menu, X, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
   const { user, isAdmin, isAuthenticated, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Core navigation tabs - Admin Portal is conditionally exposed strictly to admin role
   const baseNavItems = [
@@ -16,9 +17,20 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
     ? [...baseNavItems, { id: 'admin', label: 'Admin Portal', icon: BarChart3 }]
     : baseNavItems;
 
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+  };
+
   const handleLogout = async () => {
     await logout();
     setActiveTab('scanner');
+    setMobileMenuOpen(false);
+  };
+
+  const handleOpenAuthClick = () => {
+    if (onOpenAuth) onOpenAuth();
+    setMobileMenuOpen(false);
   };
 
   return (
@@ -27,10 +39,11 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
         {/* Brand Logo */}
         <div
           className="nav-brand"
-          onClick={() => setActiveTab('scanner')}
+          onClick={() => handleTabClick('scanner')}
           role="button"
           tabIndex={0}
           title="DataRaksha AI Home"
+          aria-label="DataRaksha AI Home"
         >
           <div className="brand-logo-glow">
             <Shield className="brand-icon" size={24} />
@@ -43,8 +56,8 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
           </div>
         </div>
 
-        {/* Dynamic Navigation Links */}
-        <nav className="nav-links" aria-label="Main Navigation">
+        {/* Desktop Navigation Links */}
+        <nav className="nav-links desktop-only" aria-label="Main Navigation">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -53,7 +66,8 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
                 key={item.id}
                 id={`nav-link-${item.id}`}
                 className={`nav-link-btn ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleTabClick(item.id)}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <Icon size={16} />
                 <span>{item.label}</span>
@@ -67,8 +81,8 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
           })}
         </nav>
 
-        {/* Right Side Status & Auth Actions */}
-        <div className="nav-actions">
+        {/* Right Side Status & Auth Actions (Desktop) */}
+        <div className="nav-actions desktop-only">
           <div className="system-status-indicator" title="Threat Protection Engines Operational">
             <span className="status-dot"></span>
             <span className="status-text">Engines Active</span>
@@ -105,14 +119,105 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
               type="button"
               id="nav-signin-btn"
               className={`btn btn-secondary action-sm ${activeTab === 'auth' ? 'active' : ''}`}
-              onClick={onOpenAuth}
+              onClick={handleOpenAuthClick}
             >
               <User size={14} />
               <span>Sign In</span>
             </button>
           )}
         </div>
+
+        {/* Mobile Hamburger Toggle Button */}
+        <button
+          type="button"
+          className="mobile-hamburger-btn mobile-only"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+        >
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
       </div>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileMenuOpen && (
+        <div className="mobile-drawer-overlay mobile-only" onClick={() => setMobileMenuOpen(false)}>
+          <div className="mobile-drawer glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-drawer-header">
+              <div className="brand-text">
+                <span className="brand-title">
+                  DataRaksha <span className="gradient-text">AI</span>
+                </span>
+                <span className="brand-tagline">Cyber Threat Shield</span>
+              </div>
+              <button
+                type="button"
+                className="drawer-close-btn"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Mobile Nav Links */}
+            <nav className="mobile-nav-links" aria-label="Mobile Navigation">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={`mobile-nav-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => handleTabClick(item.id)}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                    {item.id === 'admin' && <span className="nav-admin-badge">Admin</span>}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Mobile Auth & User Profile */}
+            <div className="mobile-drawer-footer">
+              {isAuthenticated ? (
+                <div className="mobile-user-box">
+                  <div className="mobile-user-row">
+                    <div className="user-avatar-circle">
+                      {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="mobile-user-info">
+                      <span className="mobile-user-name">
+                        {user?.displayName || user?.email?.split('@')[0]}
+                      </span>
+                      <span className="mobile-user-email">{user?.email}</span>
+                    </div>
+                    <span className={`role-pill ${isAdmin ? 'role-pill-admin' : 'role-pill-user'}`}>
+                      {isAdmin ? 'Admin' : 'User'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary action-sm mobile-logout-btn"
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={14} /> Sign Out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary full-width-btn"
+                  onClick={handleOpenAuthClick}
+                >
+                  <User size={16} /> Sign In / Create Account
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
