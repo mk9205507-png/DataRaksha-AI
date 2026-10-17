@@ -22,6 +22,7 @@ function AppContent() {
   const [globalAlert, setGlobalAlert] = useState(null);
   const [prefilledLetterData, setPrefilledLetterData] = useState(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
@@ -186,7 +187,7 @@ function AppContent() {
   };
 
   return (
-    <div className="inner-app-shell" id="dataraksha-app">
+    <div className={`inner-app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} id="dataraksha-app">
       {/* Mobile Top Header */}
       <div className="mobile-header-bar">
         <div className="landing-brand">
@@ -206,7 +207,7 @@ function AppContent() {
       </div>
 
       {/* Left Application Sidebar (Screens 2 - 6) */}
-      <div className={`sidebar-wrapper ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
+      <div className={`sidebar-wrapper ${mobileSidebarOpen ? 'mobile-open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <Sidebar
           activeTab={activeTab}
           setActiveTab={(tab) => {
@@ -214,6 +215,9 @@ function AppContent() {
             setMobileSidebarOpen(false);
           }}
           onOpenAuth={handleOpenAuth}
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
         />
       </div>
 

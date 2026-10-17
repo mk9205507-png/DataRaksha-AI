@@ -32,6 +32,12 @@
   padding: 32px 40px 60px;
   max-width: 1300px;
   width: calc(100% - var(--sidebar-width));
+  transition: margin-left var(--transition-normal), width var(--transition-normal);
+}
+
+.sidebar-collapsed .inner-main-content {
+  margin-left: 72px;
+  width: calc(100% - 72px);
 }
 
 /* ==========================================================================
@@ -50,15 +56,67 @@
   justify-content: space-between;
   z-index: 100;
   box-shadow: 1px 0 3px rgba(0, 0, 0, 0.02);
+  transition: width var(--transition-normal);
+}
+
+.app-sidebar.collapsed {
+  width: 72px;
+}
+
+.sidebar-brand-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 14px 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.app-sidebar.collapsed .sidebar-brand-wrapper {
+  padding: 16px 8px 12px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-collapse-toggle-btn {
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-collapse-toggle-btn:hover {
+  background: var(--bg-surface-active);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary-light);
 }
 
 .sidebar-brand {
-  padding: 24px 20px 20px;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   user-select: none;
+}
+
+.app-sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.app-sidebar.collapsed .sidebar-profile-card {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.app-sidebar.collapsed .sidebar-section-divider {
+  margin: 12px 10px;
 }
 
 .sidebar-brand-icon {
@@ -2192,7 +2250,161 @@
 
 .auth-brand-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+
+/* Auth Mode Tab Switcher (Sign In vs Create Account) */
+.auth-tabs-nav {
+  display: flex;
+  background-color: var(--bg-surface-hover);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 20px;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.auth-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.auth-tab-btn.active {
+  background: var(--bg-surface);
+  color: var(--brand-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.required-star {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.forgot-pass-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color var(--transition-fast);
+}
+
+.forgot-pass-link:hover {
+  text-decoration: underline;
+  color: #1d4ed8;
+}
+
+/* Field Validation Error */
+.field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: #dc2626;
+  margin-top: 3px;
+}
+
+/* Password Strength Indicator */
+.password-strength-box {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.strength-bars-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.strength-bar {
+  height: 4px;
+  border-radius: 2px;
+  background-color: #e2e8f0;
+  transition: background-color var(--transition-fast);
+}
+
+.strength-bar.strength-weak {
+  background-color: #ef4444;
+}
+
+.strength-bar.strength-fair {
+  background-color: #f59e0b;
+}
+
+.strength-bar.strength-strong {
+  background-color: #10b981;
+}
+
+.strength-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.strength-label.strength-weak {
+  color: #ef4444;
+}
+
+.strength-label.strength-fair {
+  color: #f59e0b;
+}
+
+.strength-label.strength-strong {
+  color: #10b981;
+}
+
+/* Forgot Password Inline Form */
+.forgot-header-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+.forgot-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 2px;
+}
+
+.forgot-desc {
+  font-size: 0.78rem;
+  color: #3b82f6;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.forgot-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .auth-shield-icon {

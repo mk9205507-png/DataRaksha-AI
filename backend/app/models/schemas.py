@@ -197,3 +197,22 @@ class UserProfileResponse(BaseModel):
     role: str = "individual"
     created_at: Optional[str] = None
 
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., description="User registered email address")
+    password: str = Field(..., min_length=1, description="Account password")
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="User full legal name")
+    email: str = Field(..., description="Valid email address")
+    password: str = Field(..., min_length=8, description="Password with minimum 8 characters")
+    role: Optional[str] = Field(default="individual", description="User role: individual or admin")
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserProfileResponse
+    message: Optional[str] = "Authentication successful"
+

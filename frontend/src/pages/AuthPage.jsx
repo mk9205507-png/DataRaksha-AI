@@ -9,99 +9,258 @@ import {
   ArrowRight,
   Sparkles,
   RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  KeyRound,
+  ShieldCheck,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthPage = ({ onAuthSuccess }) => {
-  const { login } = useAuth();
+  const { login, signup, resetPassword } = useAuth();
+
+  // Mode: 'login' | 'register'
+  const [authMode, setAuthMode] = useState('login');
 
   // Check if user has signed in before
   const savedName = localStorage.getItem('dataraksha_person_name') || '';
   const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
-  const hasSignedInBefore = Boolean(savedName);
 
-  // Form inputs: Name, Email, Password
-  // If signed in before, prefill name and email so they can confirm or change it!
-  const [name, setName] = useState(savedName || 'Kalyani');
-  const [email, setEmail] = useState(savedEmail || (savedName ? 'kalyani@dataraksha.ai' : ''));
-  const [password, setPassword] = useState('');
+  // ---------------------------------------------------------------------------
+  // Login Form State
+  // ---------------------------------------------------------------------------
+  const [loginEmail, setLoginEmail] = useState(savedEmail || (savedName ? 'kalyani@dataraksha.ai' : ''));
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginErrors, setLoginErrors] = useState({});
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  // ---------------------------------------------------------------------------
+  // Register Form State
+  // ---------------------------------------------------------------------------
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
+  const [regErrors, setRegErrors] = useState({});
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Forgot Password State
+  // ---------------------------------------------------------------------------
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  // Global Alert State
   const [alert, setAlert] = useState(null);
-  const [fieldErrors, setFieldErrors] = useState({});
 
-  const validate = () => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // ---------------------------------------------------------------------------
+  // Password Strength Evaluator
+  // ---------------------------------------------------------------------------
+  const evaluatePasswordStrength = (pass) => {
+    if (!pass) return { score: 0, label: '', colorClass: '' };
+    let score = 0;
+    if (pass.length >= 8) score += 1;
+    if (pass.length >= 12) score += 1;
+    if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) score += 1;
+    if (/[0-9]/.test(pass)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pass)) score += 1;
+
+    if (score <= 2) return { score: 1, label: 'Weak', colorClass: 'strength-weak' };
+    if (score <= 3) return { score: 2, label: 'Fair', colorClass: 'strength-fair' };
+    return { score: 3, label: 'Strong', colorClass: 'strength-strong' };
+  };
+
+  const passwordStrength = evaluatePasswordStrength(regPassword);
+
+  // ---------------------------------------------------------------------------
+  // Login Validation & Submission
+  // ---------------------------------------------------------------------------
+  const validateLogin = () => {
     const errors = {};
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const cleanEmail = loginEmail.trim();
 
-    if (!name.trim()) {
-      errors.name = 'Please enter your name.';
+    if (!cleanEmail) {
+      errors.email = 'Email address is required.';
+    } else if (!emailRegex.test(cleanEmail)) {
+      errors.email = 'Please enter a valid email address (e.g. name@example.com).';
     }
 
-    if (!email.trim()) {
-      errors.email = 'Please enter your email address.';
-    } else if (!emailRegex.test(email.trim())) {
-      errors.email = 'Please enter a valid email address.';
+    if (!loginPassword) {
+      errors.password = 'Password is required.';
+    } else if (!loginPassword.trim()) {
+      errors.password = 'Password cannot contain only spaces.';
     }
 
-    if (!password) {
-      errors.password = 'Please enter your password.';
-    } else if (password.length < 4) {
-      errors.password = 'Password must be at least 4 characters.';
-    }
-
-    setFieldErrors(errors);
+    setLoginErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSignIn = async (e) => {
+  const handleLoginSubmit = async (e) => {
     if (e) e.preventDefault();
     setAlert(null);
 
-    if (!validate()) {
+    if (!validateLogin()) {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoggingIn(true);
 
     try {
-      const trimmedName = name.trim();
-      // Save name & email so the app always remembers and calls them by name!
-      localStorage.setItem('dataraksha_person_name', trimmedName);
-      localStorage.setItem('dataraksha_saved_email', email.trim());
-
+      const cleanEmail = loginEmail.trim();
       const result = await login({
-        name: trimmedName,
-        email: email.trim(),
-        password,
+        email: cleanEmail,
+        password: loginPassword,
       });
 
-      const authenticatedUser = {
-        ...result.user,
-        displayName: trimmedName,
-      };
+      setAlert({
+        type: 'success',
+        message: 'Authentication successful! Loading your security shield...',
+      });
 
-      if (onAuthSuccess) {
-        onAuthSuccess(authenticatedUser);
-      }
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess(result.user);
+        }
+      }, 500);
     } catch (err) {
       setAlert({
         type: 'error',
-        message: err.message || 'Authentication failed. Please verify credentials.',
+        message: err.message || 'Incorrect email or password. Please verify credentials.',
       });
     } finally {
-      setIsLoading(false);
+      setIsLoggingIn(false);
     }
   };
 
-  // Quick fill helper for testing
-  const handleQuickFill = (fillName, fillEmail) => {
-    setName(fillName);
-    setEmail(fillEmail);
-    setPassword('SecureP@ss2026');
-    setFieldErrors({});
+  // ---------------------------------------------------------------------------
+  // Registration Validation & Submission
+  // ---------------------------------------------------------------------------
+  const validateRegistration = () => {
+    const errors = {};
+    const cleanName = regName.trim();
+    const cleanEmail = regEmail.trim();
+
+    if (!cleanName) {
+      errors.name = 'Full name is required.';
+    }
+
+    if (!cleanEmail) {
+      errors.email = 'Email address is required.';
+    } else if (!emailRegex.test(cleanEmail)) {
+      errors.email = 'Please enter a valid email format (e.g. name@example.com).';
+    }
+
+    if (!regPassword) {
+      errors.password = 'Password is required.';
+    } else if (!regPassword.trim()) {
+      errors.password = 'Password cannot contain only spaces.';
+    } else if (regPassword.length < 8) {
+      errors.password = 'Password must be at least 8 characters long.';
+    } else {
+      const hasLetter = /[a-zA-Z]/.test(regPassword);
+      const hasDigit = /[0-9]/.test(regPassword);
+      if (!hasLetter || !hasDigit) {
+        errors.password = 'Password must contain at least one letter and one number.';
+      }
+    }
+
+    if (!regConfirmPassword) {
+      errors.confirmPassword = 'Confirm password is required.';
+    } else if (regPassword !== regConfirmPassword) {
+      errors.confirmPassword = 'Passwords do not match. Please verify.';
+    }
+
+    setRegErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setAlert(null);
+
+    if (!validateRegistration()) {
+      return;
+    }
+
+    setIsRegistering(true);
+
+    try {
+      const cleanName = regName.trim();
+      const cleanEmail = regEmail.trim().toLowerCase();
+
+      const result = await signup({
+        fullName: cleanName,
+        email: cleanEmail,
+        password: regPassword,
+        role: cleanEmail.includes('admin') ? 'admin' : 'individual',
+      });
+
+      setAlert({
+        type: 'success',
+        message: 'Account registered successfully! Welcome to DataRaksha AI.',
+      });
+
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess(result.user);
+        }
+      }, 700);
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.message || 'Registration failed. Please try again.',
+      });
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Forgot Password Handler
+  // ---------------------------------------------------------------------------
+  const handleResetPassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!forgotEmail.trim() || !emailRegex.test(forgotEmail.trim())) {
+      setAlert({
+        type: 'warning',
+        message: 'Please enter a valid email address to receive password reset instructions.',
+      });
+      return;
+    }
+
+    setIsResetting(true);
+    setAlert(null);
+
+    try {
+      await resetPassword(forgotEmail.trim());
+      setResetSuccess(true);
+      setAlert({
+        type: 'success',
+        message: 'Password reset instructions have been sent to your email address.',
+      });
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.message || 'Failed to send reset link. Please try again shortly.',
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  // Quick fill helper for developers / reviewers
+  const handleQuickFill = (name, email) => {
+    setLoginEmail(email);
+    setLoginPassword('SecureP@ss2026');
+    setLoginErrors({});
     setAlert(null);
   };
 
@@ -113,26 +272,49 @@ export const AuthPage = ({ onAuthSuccess }) => {
           <div className="auth-shield-icon">
             <Shield size={28} className="shield-svg" />
           </div>
-
-          {hasSignedInBefore ? (
-            <>
-              <h2 className="auth-main-title">
-                Welcome back, <span className="text-blue">{savedName}</span>!
-              </h2>
-              <p className="auth-sub-title">
-                Confirm your name and credentials below to access your security dashboard.
-              </p>
-            </>
-          ) : (
-            <>
-              <h2 className="auth-main-title">Sign In to DataRaksha AI</h2>
-              <p className="auth-sub-title">
-                Enter your name, email, and password to access your threat protection dashboard.
-              </p>
-            </>
-          )}
+          <h2 className="auth-main-title">
+            DataRaksha <span className="gradient-text">AI</span>
+          </h2>
+          <p className="auth-sub-title">
+            {authMode === 'login'
+              ? 'Access your privacy shield, threat analytics, and statutory rights portal.'
+              : 'Create an encrypted account to protect your data identity across the web.'}
+          </p>
         </div>
 
+        {/* Tab Switcher: Sign In vs. Create Account */}
+        <div className="auth-tabs-nav" role="tablist" aria-label="Authentication Options">
+          <button
+            type="button"
+            id="tab-btn-signin"
+            role="tab"
+            aria-selected={authMode === 'login'}
+            className={`auth-tab-btn ${authMode === 'login' ? 'active' : ''}`}
+            onClick={() => {
+              setAuthMode('login');
+              setShowForgotPassword(false);
+              setAlert(null);
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            id="tab-btn-register"
+            role="tab"
+            aria-selected={authMode === 'register'}
+            className={`auth-tab-btn ${authMode === 'register' ? 'active' : ''}`}
+            onClick={() => {
+              setAuthMode('register');
+              setShowForgotPassword(false);
+              setAlert(null);
+            }}
+          >
+            Create Account
+          </button>
+        </div>
+
+        {/* Global Feedback Alert */}
         {alert && (
           <div className="auth-alert-box">
             <Alert
@@ -143,148 +325,380 @@ export const AuthPage = ({ onAuthSuccess }) => {
           </div>
         )}
 
-        {/* 3 Input Form: Name, Email, Password */}
-        <form onSubmit={handleSignIn} className="auth-input-form" noValidate>
-          {/* Field 1: Name */}
-          <div className="form-field-group">
-            <label htmlFor="auth-name-input" className="form-label">
-              Your Name
-            </label>
-            <div className={`input-wrapper ${fieldErrors.name ? 'has-error' : ''}`}>
-              <User size={18} className="input-icon text-muted" />
-              <input
-                id="auth-name-input"
-                type="text"
-                className="input-field auth-text-input"
-                placeholder="Enter your name (e.g. Kalyani)"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: null }));
-                }}
-                disabled={isLoading}
-                autoFocus={!hasSignedInBefore}
-              />
+        {/* ------------------------------------------------------------------- */}
+        {/* TAB 1: SIGN IN (LOGIN)                                              */}
+        {/* ------------------------------------------------------------------- */}
+        {authMode === 'login' && !showForgotPassword && (
+          <form onSubmit={handleLoginSubmit} className="auth-input-form" noValidate>
+            {/* Email Field */}
+            <div className="form-field-group">
+              <label htmlFor="login-email-input" className="form-label">
+                Email Address <span className="required-star">*</span>
+              </label>
+              <div className={`input-wrapper ${loginErrors.email ? 'has-error' : ''}`}>
+                <Mail size={18} className="input-icon text-muted" />
+                <input
+                  id="login-email-input"
+                  type="email"
+                  className="input-field auth-text-input"
+                  placeholder="name@example.com"
+                  value={loginEmail}
+                  onChange={(e) => {
+                    setLoginEmail(e.target.value);
+                    if (loginErrors.email) setLoginErrors((prev) => ({ ...prev, email: null }));
+                  }}
+                  disabled={isLoggingIn}
+                  autoComplete="email"
+                  autoFocus
+                />
+              </div>
+              {loginErrors.email && (
+                <span className="field-error-msg" id="login-email-error">
+                  <AlertCircle size={13} /> {loginErrors.email}
+                </span>
+              )}
             </div>
-            {fieldErrors.name && (
-              <span className="field-error-msg">{fieldErrors.name}</span>
-            )}
-          </div>
 
-          {/* Field 2: Email */}
-          <div className="form-field-group">
-            <label htmlFor="auth-email-input" className="form-label">
-              Email Address
-            </label>
-            <div className={`input-wrapper ${fieldErrors.email ? 'has-error' : ''}`}>
-              <Mail size={18} className="input-icon text-muted" />
-              <input
-                id="auth-email-input"
-                type="email"
-                className="input-field auth-text-input"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: null }));
-                }}
-                disabled={isLoading}
-              />
+            {/* Password Field */}
+            <div className="form-field-group">
+              <div className="form-label-row">
+                <label htmlFor="login-password-input" className="form-label">
+                  Password <span className="required-star">*</span>
+                </label>
+                <button
+                  type="button"
+                  className="forgot-pass-link"
+                  onClick={() => setShowForgotPassword(true)}
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className={`input-wrapper ${loginErrors.password ? 'has-error' : ''}`}>
+                <Lock size={18} className="input-icon text-muted" />
+                <input
+                  id="login-password-input"
+                  type={showLoginPassword ? 'text' : 'password'}
+                  className="input-field auth-text-input pr-10"
+                  placeholder="Enter your password"
+                  value={loginPassword}
+                  onChange={(e) => {
+                    setLoginPassword(e.target.value);
+                    if (loginErrors.password) setLoginErrors((prev) => ({ ...prev, password: null }));
+                  }}
+                  disabled={isLoggingIn}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  id="login-password-toggle-btn"
+                  className="password-toggle-btn"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {loginErrors.password && (
+                <span className="field-error-msg" id="login-password-error">
+                  <AlertCircle size={13} /> {loginErrors.password}
+                </span>
+              )}
             </div>
-            {fieldErrors.email && (
-              <span className="field-error-msg">{fieldErrors.email}</span>
-            )}
-          </div>
 
-          {/* Field 3: Password */}
-          <div className="form-field-group">
-            <label htmlFor="auth-password-input" className="form-label">
-              Password
-            </label>
-            <div className={`input-wrapper ${fieldErrors.password ? 'has-error' : ''}`}>
-              <Lock size={18} className="input-icon text-muted" />
-              <input
-                id="auth-password-input"
-                type={showPassword ? 'text' : 'password'}
-                className="input-field auth-text-input pr-10"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: null }));
-                }}
-                disabled={isLoading}
-                autoFocus={hasSignedInBefore}
-              />
+            {/* Submit Button */}
+            <button
+              id="login-submit-btn"
+              type="submit"
+              className="btn btn-primary auth-submit-btn w-full"
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? (
+                <>
+                  <div className="spinner sm" /> Verifying Credentials...
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Dashboard</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* FORGOT PASSWORD INLINE FORM                                         */}
+        {/* ------------------------------------------------------------------- */}
+        {authMode === 'login' && showForgotPassword && (
+          <form onSubmit={handleResetPassword} className="auth-input-form" noValidate>
+            <div className="forgot-header-box">
+              <KeyRound size={20} className="text-blue" />
+              <div>
+                <h4 className="forgot-title">Reset Your Password</h4>
+                <p className="forgot-desc">
+                  Enter your registered email address and we will send you verification instructions.
+                </p>
+              </div>
+            </div>
+
+            <div className="form-field-group">
+              <label htmlFor="forgot-email-input" className="form-label">
+                Registered Email <span className="required-star">*</span>
+              </label>
+              <div className="input-wrapper">
+                <Mail size={18} className="input-icon text-muted" />
+                <input
+                  id="forgot-email-input"
+                  type="email"
+                  className="input-field auth-text-input"
+                  placeholder="name@example.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  disabled={isResetting || resetSuccess}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="forgot-actions-row">
+              <button
+                type="submit"
+                className="btn btn-primary w-full"
+                disabled={isResetting || resetSuccess}
+              >
+                {isResetting ? 'Sending link...' : resetSuccess ? 'Reset Link Sent' : 'Send Reset Instructions'}
+              </button>
               <button
                 type="button"
-                className="password-toggle-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="btn btn-ghost w-full"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetSuccess(false);
+                  setAlert(null);
+                }}
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                Back to Sign In
               </button>
             </div>
-            {fieldErrors.password && (
-              <span className="field-error-msg">{fieldErrors.password}</span>
-            )}
-          </div>
+          </form>
+        )}
 
-          {/* Submit Button */}
-          <button
-            id="auth-submit-btn"
-            type="submit"
-            className="btn btn-primary auth-submit-btn w-full"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <div className="spinner sm" /> Entering Dashboard...
-              </>
-            ) : (
-              <>
-                <span>Sign In as {name.trim() || 'User'}</span>
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-        </form>
+        {/* ------------------------------------------------------------------- */}
+        {/* TAB 2: CREATE ACCOUNT (REGISTRATION)                                */}
+        {/* ------------------------------------------------------------------- */}
+        {authMode === 'register' && (
+          <form onSubmit={handleRegisterSubmit} className="auth-input-form" noValidate>
+            {/* Full Name */}
+            <div className="form-field-group">
+              <label htmlFor="reg-name-input" className="form-label">
+                Full Name <span className="required-star">*</span>
+              </label>
+              <div className={`input-wrapper ${regErrors.name ? 'has-error' : ''}`}>
+                <User size={18} className="input-icon text-muted" />
+                <input
+                  id="reg-name-input"
+                  type="text"
+                  className="input-field auth-text-input"
+                  placeholder="Enter your full legal name"
+                  value={regName}
+                  onChange={(e) => {
+                    setRegName(e.target.value);
+                    if (regErrors.name) setRegErrors((prev) => ({ ...prev, name: null }));
+                  }}
+                  disabled={isRegistering}
+                  autoFocus
+                />
+              </div>
+              {regErrors.name && (
+                <span className="field-error-msg" id="reg-name-error">
+                  <AlertCircle size={13} /> {regErrors.name}
+                </span>
+              )}
+            </div>
+
+            {/* Email */}
+            <div className="form-field-group">
+              <label htmlFor="reg-email-input" className="form-label">
+                Email Address <span className="required-star">*</span>
+              </label>
+              <div className={`input-wrapper ${regErrors.email ? 'has-error' : ''}`}>
+                <Mail size={18} className="input-icon text-muted" />
+                <input
+                  id="reg-email-input"
+                  type="email"
+                  className="input-field auth-text-input"
+                  placeholder="name@example.com"
+                  value={regEmail}
+                  onChange={(e) => {
+                    setRegEmail(e.target.value);
+                    if (regErrors.email) setRegErrors((prev) => ({ ...prev, email: null }));
+                  }}
+                  disabled={isRegistering}
+                  autoComplete="email"
+                />
+              </div>
+              {regErrors.email && (
+                <span className="field-error-msg" id="reg-email-error">
+                  <AlertCircle size={13} /> {regErrors.email}
+                </span>
+              )}
+            </div>
+
+            {/* Password */}
+            <div className="form-field-group">
+              <label htmlFor="reg-password-input" className="form-label">
+                Password <span className="required-star">*</span>
+              </label>
+              <div className={`input-wrapper ${regErrors.password ? 'has-error' : ''}`}>
+                <Lock size={18} className="input-icon text-muted" />
+                <input
+                  id="reg-password-input"
+                  type={showRegPassword ? 'text' : 'password'}
+                  className="input-field auth-text-input pr-10"
+                  placeholder="At least 8 characters (letter + number)"
+                  value={regPassword}
+                  onChange={(e) => {
+                    setRegPassword(e.target.value);
+                    if (regErrors.password) setRegErrors((prev) => ({ ...prev, password: null }));
+                  }}
+                  disabled={isRegistering}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  id="reg-password-toggle-btn"
+                  className="password-toggle-btn"
+                  onClick={() => setShowRegPassword(!showRegPassword)}
+                  aria-label={showRegPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {/* Password Strength Indicator */}
+              {regPassword && (
+                <div className="password-strength-box" id="password-strength-indicator">
+                  <div className="strength-bars-row">
+                    <span className={`strength-bar ${passwordStrength.score >= 1 ? passwordStrength.colorClass : ''}`} />
+                    <span className={`strength-bar ${passwordStrength.score >= 2 ? passwordStrength.colorClass : ''}`} />
+                    <span className={`strength-bar ${passwordStrength.score >= 3 ? passwordStrength.colorClass : ''}`} />
+                  </div>
+                  <span className={`strength-label ${passwordStrength.colorClass}`}>
+                    Strength: {passwordStrength.label}
+                  </span>
+                </div>
+              )}
+
+              {regErrors.password && (
+                <span className="field-error-msg" id="reg-password-error">
+                  <AlertCircle size={13} /> {regErrors.password}
+                </span>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="form-field-group">
+              <label htmlFor="reg-confirm-password-input" className="form-label">
+                Confirm Password <span className="required-star">*</span>
+              </label>
+              <div className={`input-wrapper ${regErrors.confirmPassword ? 'has-error' : ''}`}>
+                <Lock size={18} className="input-icon text-muted" />
+                <input
+                  id="reg-confirm-password-input"
+                  type={showRegConfirmPassword ? 'text' : 'password'}
+                  className="input-field auth-text-input pr-10"
+                  placeholder="Re-enter password to confirm"
+                  value={regConfirmPassword}
+                  onChange={(e) => {
+                    setRegConfirmPassword(e.target.value);
+                    if (regErrors.confirmPassword) {
+                      setRegErrors((prev) => ({ ...prev, confirmPassword: null }));
+                    }
+                  }}
+                  disabled={isRegistering}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  id="reg-confirm-password-toggle-btn"
+                  className="password-toggle-btn"
+                  onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                  aria-label={showRegConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  tabIndex={-1}
+                >
+                  {showRegConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {regErrors.confirmPassword && (
+                <span className="field-error-msg" id="reg-confirm-password-error">
+                  <AlertCircle size={13} /> {regErrors.confirmPassword}
+                </span>
+              )}
+            </div>
+
+            {/* Submit Registration */}
+            <button
+              id="register-submit-btn"
+              type="submit"
+              className="btn btn-primary auth-submit-btn w-full"
+              disabled={isRegistering}
+            >
+              {isRegistering ? (
+                <>
+                  <div className="spinner sm" /> Creating Security Profile...
+                </>
+              ) : (
+                <>
+                  <span>Create Encrypted Account</span>
+                  <ShieldCheck size={16} />
+                </>
+              )}
+            </button>
+          </form>
+        )}
 
         {/* Quick Demo Pre-fill Pills */}
         <div className="auth-quick-fill-section">
           <span className="quick-fill-label">
-            <Sparkles size={13} /> Quick Sign In Options:
+            <Sparkles size={13} /> Quick Demo Profiles:
           </span>
           <div className="quick-fill-chips">
             <button
               type="button"
               className="quick-fill-chip"
-              onClick={() => handleQuickFill('Kalyani', 'kalyani@dataraksha.ai')}
+              onClick={() => {
+                setAuthMode('login');
+                handleQuickFill('Kalyani', 'kalyani@dataraksha.ai');
+              }}
             >
               Sign In as Kalyani
             </button>
             <button
               type="button"
               className="quick-fill-chip"
-              onClick={() => handleQuickFill('Admin', 'admin@dataraksha.ai')}
+              onClick={() => {
+                setAuthMode('login');
+                handleQuickFill('Admin', 'admin@dataraksha.ai');
+              }}
             >
               Sign In as Admin
             </button>
-            {hasSignedInBefore && (
+            {savedName && (
               <button
                 type="button"
                 className="quick-fill-chip reset-chip"
                 onClick={() => {
-                  setName('');
-                  setEmail('');
-                  setPassword('');
+                  setLoginEmail('');
+                  setLoginPassword('');
                   localStorage.removeItem('dataraksha_person_name');
                   localStorage.removeItem('dataraksha_saved_email');
-                  setFieldErrors({});
+                  setLoginErrors({});
                 }}
                 title="Clear saved name"
               >
-                <RotateCcw size={12} /> Clear Saved Name
+                <RotateCcw size={12} /> Clear Saved
               </button>
             )}
           </div>

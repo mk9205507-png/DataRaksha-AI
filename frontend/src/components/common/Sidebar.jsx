@@ -8,6 +8,8 @@ import {
   Clock,
   Shield,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   User,
   ShieldAlert,
@@ -16,51 +18,92 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
+export const Sidebar = ({
+  activeTab,
+  setActiveTab,
+  onOpenAuth,
+  isCollapsed = false,
+  setIsCollapsed,
+  onCloseMobile,
+}) => {
   const { user, isAdmin, isAuthenticated, logout, loginAsDemoUser, loginAsDemoAdmin } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  // Exact 6 core navigation items from the reference design
+  // Core navigation items
   const navItems = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'email', label: 'Email Safety', icon: Mail },
-    { id: 'url', label: 'URL Safety', icon: Link2 },
-    { id: 'policy', label: 'Privacy Policy', icon: FileText },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'history', label: 'History', icon: Clock },
+    { id: 'home', label: 'Home', icon: Home, tooltip: 'Overview & Features' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, tooltip: 'Threat Metrics & Overview' },
+    { id: 'email', label: 'Email Safety', icon: Mail, tooltip: 'Phishing & Email Threat Scanner' },
+    { id: 'url', label: 'URL Safety', icon: Link2, tooltip: 'Malicious Link & Domain Scanner' },
+    { id: 'policy', label: 'Privacy Policy', icon: FileText, tooltip: 'Terms of Service Simplifier' },
+    { id: 'history', label: 'Scan History', icon: Clock, tooltip: 'Past Threat Audit Log' },
   ];
 
-  // Secondary capabilities preserved for complete functionality
+  // Secondary tools
   const extraItems = [
-    { id: 'letters', label: 'Letter Studio', icon: FileCode },
-    ...(isAdmin ? [{ id: 'admin', label: 'Admin Portal', icon: ShieldAlert }] : []),
+    { id: 'letters', label: 'Statutory Letters', icon: FileCode, tooltip: 'DPDP & GDPR Deletion Notices' },
+    ...(isAdmin ? [{ id: 'admin', label: 'Admin Portal', icon: ShieldAlert, tooltip: 'Restricted Oversight' }] : []),
   ];
 
   const handleNavClick = (tabId) => {
     setActiveTab(tabId);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
+  const handleLogout = async (e) => {
+    if (e) e.stopPropagation();
+    try {
+      await logout();
+    } finally {
+      setProfileMenuOpen(false);
+      if (onCloseMobile) onCloseMobile();
+      setActiveTab('home');
+    }
   };
 
   const displayName =
     user?.displayName ||
+    user?.full_name ||
     user?.name ||
     localStorage.getItem('dataraksha_person_name') ||
     'Kalyani';
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
-    <aside className="app-sidebar" id="app-sidebar" aria-label="Sidebar Navigation">
+    <aside
+      className={`app-sidebar ${isCollapsed ? 'collapsed' : ''}`}
+      id="app-sidebar"
+      aria-label="Sidebar Navigation"
+    >
       {/* Brand Header */}
-      <div
-        className="sidebar-brand"
-        onClick={() => handleNavClick('home')}
-        role="button"
-        tabIndex={0}
-        title="DataRaksha AI Home"
-      >
-        <div className="sidebar-brand-icon">
-          <Shield size={22} className="shield-icon" />
+      <div className="sidebar-brand-wrapper">
+        <div
+          className="sidebar-brand"
+          onClick={() => handleNavClick('home')}
+          role="button"
+          tabIndex={0}
+          title="DataRaksha AI Home"
+        >
+          <div className="sidebar-brand-icon">
+            <Shield size={22} className="shield-icon" />
+          </div>
+          {!isCollapsed && <span className="sidebar-brand-title">DataRaksha AI</span>}
         </div>
-        <span className="sidebar-brand-title">DataRaksha AI</span>
+
+        {/* Desktop Collapse Toggle Button */}
+        {setIsCollapsed && (
+          <button
+            type="button"
+            className="sidebar-collapse-toggle-btn"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+        )}
       </div>
 
       {/* Main Navigation Links */}
@@ -77,18 +120,19 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
                 className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => handleNavClick(item.id)}
                 aria-current={isActive ? 'page' : undefined}
+                title={isCollapsed ? `${item.label} — ${item.tooltip}` : item.tooltip}
               >
                 <Icon size={18} className="sidebar-nav-icon" />
-                <span className="sidebar-nav-label">{item.label}</span>
+                {!isCollapsed && <span className="sidebar-nav-label">{item.label}</span>}
               </button>
             );
           })}
         </div>
 
         {/* Extra Preserved Tools Section */}
-        <div className="sidebar-section-divider"></div>
+        <div className="sidebar-section-divider" />
         <div className="sidebar-nav-group secondary-group">
-          <span className="sidebar-group-heading">Tools</span>
+          {!isCollapsed && <span className="sidebar-group-heading">Data Rights & Tools</span>}
           {extraItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -100,17 +144,22 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
                 className={`sidebar-nav-item sub-item ${isActive ? 'active' : ''}`}
                 onClick={() => handleNavClick(item.id)}
                 aria-current={isActive ? 'page' : undefined}
+                title={isCollapsed ? `${item.label} — ${item.tooltip}` : item.tooltip}
               >
                 <Icon size={16} className="sidebar-nav-icon" />
-                <span className="sidebar-nav-label">{item.label}</span>
-                {item.id === 'admin' && <span className="sidebar-badge-admin">Admin</span>}
+                {!isCollapsed && (
+                  <>
+                    <span className="sidebar-nav-label">{item.label}</span>
+                    {item.id === 'admin' && <span className="sidebar-badge-admin">Admin</span>}
+                  </>
+                )}
               </button>
             );
           })}
         </div>
       </nav>
 
-      {/* User Profile Footer (Matching Reference Design: circle avatar + Kalyani More + chevron) */}
+      {/* User Profile Footer */}
       <div className="sidebar-footer">
         <div
           className="sidebar-profile-card"
@@ -118,27 +167,20 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
           onClick={() => setProfileMenuOpen(!profileMenuOpen)}
           role="button"
           tabIndex={0}
+          title={isCollapsed ? `${displayName} (${isAdmin ? 'Admin' : 'User'})` : 'Account details & switch demo'}
         >
           <div className="profile-avatar">{initial}</div>
-          <div className="profile-info">
-            <span className="profile-name" title={displayName}>
-              {displayName}
-            </span>
-            <span className="profile-sub">{isAdmin ? 'Administrator' : 'Individual'}</span>
-          </div>
-          <button
-            type="button"
-            className="sidebar-quick-signout-btn"
-            title="Sign Out"
-            onClick={async (e) => {
-              e.stopPropagation();
-              await logout();
-              setActiveTab('home');
-            }}
-          >
-            <LogOut size={15} />
-          </button>
-          <ChevronDown size={16} className={`profile-chevron ${profileMenuOpen ? 'open' : ''}`} />
+          {!isCollapsed && (
+            <>
+              <div className="profile-info">
+                <span className="profile-name" title={displayName}>
+                  {displayName}
+                </span>
+                <span className="profile-sub">{isAdmin ? 'Administrator' : 'Individual'}</span>
+              </div>
+              <ChevronDown size={16} className={`profile-chevron ${profileMenuOpen ? 'open' : ''}`} />
+            </>
+          )}
         </div>
 
         {/* Profile Popover Menu */}
@@ -148,13 +190,13 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
               <strong>{displayName}</strong>
               <small>{user?.email || 'kalyani@dataraksha.ai'}</small>
             </div>
-            <div className="popover-divider"></div>
+            <div className="popover-divider" />
 
             <button
               type="button"
               className="popover-item"
               onClick={() => {
-                loginAsDemoUser();
+                if (loginAsDemoUser) loginAsDemoUser();
                 setProfileMenuOpen(false);
               }}
             >
@@ -166,7 +208,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
               type="button"
               className="popover-item"
               onClick={() => {
-                loginAsDemoAdmin();
+                if (loginAsDemoAdmin) loginAsDemoAdmin();
                 setProfileMenuOpen(false);
               }}
             >
@@ -177,12 +219,9 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
             {isAuthenticated ? (
               <button
                 type="button"
+                id="sidebar-signout-btn"
                 className="popover-item danger"
-                onClick={async () => {
-                  await logout();
-                  setProfileMenuOpen(false);
-                  setActiveTab('home');
-                }}
+                onClick={handleLogout}
               >
                 <LogOut size={14} />
                 <span>Sign Out</span>
@@ -190,6 +229,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onOpenAuth }) => {
             ) : (
               <button
                 type="button"
+                id="sidebar-signin-btn"
                 className="popover-item primary"
                 onClick={() => {
                   setProfileMenuOpen(false);

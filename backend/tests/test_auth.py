@@ -200,3 +200,104 @@ def test_verify_supabase_token_signature_verification(monkeypatch):
     )
     with pytest.raises(AuthenticationException):
         verify_supabase_token(wrong_token)
+
+
+# ------------------------------------------------------------------------------
+# 5. User Registration & Login Validation Tests
+# ------------------------------------------------------------------------------
+
+def test_register_user_success():
+    """Verify successful user registration with valid details."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Kalyani More",
+            "email": "kalyani.test@dataraksha.ai",
+            "password": "SecurePassword2026",
+            "role": "individual",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "kalyani.test@dataraksha.ai"
+    assert data["user"]["role"] == "individual"
+
+
+def test_register_user_invalid_email():
+    """Verify 422 error on malformed email."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Kalyani More",
+            "email": "invalid-email-no-at",
+            "password": "SecurePassword2026",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_register_user_short_password():
+    """Verify 422 error when password is under 8 characters."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Kalyani More",
+            "email": "kalyani@dataraksha.ai",
+            "password": "short",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_register_user_password_missing_numbers():
+    """Verify 422 error when password lacks a number."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Kalyani More",
+            "email": "kalyani@dataraksha.ai",
+            "password": "PasswordOnlyLetters",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_login_user_success():
+    """Verify successful login returns valid token."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "kalyani@dataraksha.ai",
+            "password": "SecurePassword2026",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "kalyani@dataraksha.ai"
+
+
+def test_login_user_invalid_email():
+    """Verify 422 error when login email is malformed."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "not-an-email",
+            "password": "SomePassword123",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_login_user_incorrect_short_password():
+    """Verify 401 Unauthorized when password is too short / incorrect."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "kalyani@dataraksha.ai",
+            "password": "123",
+        },
+    )
+    assert response.status_code == 401
+    assert "Incorrect email or password" in response.json()["detail"]
