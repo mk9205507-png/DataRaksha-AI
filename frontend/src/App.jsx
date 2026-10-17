@@ -130,18 +130,7 @@ function AppContent() {
     };
   }, [isAuthenticated]);
 
-  const handleAuthSuccess = (authenticatedUser) => {
-    const personName =
-      authenticatedUser?.displayName ||
-      authenticatedUser?.user_metadata?.full_name ||
-      user?.displayName ||
-      '';
-    setGlobalAlert({
-      type: 'success',
-      message: personName
-        ? `Welcome, ${personName}! Your security shield is active.`
-        : 'Authentication successful! Welcome to DataRaksha AI.',
-    });
+  const handleAuthSuccess = () => {
 
     const targetTab = redirectTabAfterAuth || 'dashboard';
     setRedirectTabAfterAuth(null);
