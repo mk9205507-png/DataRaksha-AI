@@ -48,13 +48,37 @@ class ThreatItem(BaseModel):
 class MessageScanRequest(BaseModel):
     content: str = Field(..., description="SMS, email, or message body to analyze")
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "content": "URGENT: Your account has been temporarily restricted. Verify your login credentials immediately at: https://secure-account-update.xyz to prevent permanent suspension."
+            }
+        }
+    }
+
 
 class LinkScanRequest(BaseModel):
     url: str = Field(..., description="Target URL link to evaluate for threats")
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "url": "https://testsafebrowsing.appspot.com/s/phishing.html"
+            }
+        }
+    }
+
 
 class PolicyScanRequest(BaseModel):
     policy_text: str = Field(..., description="Raw text of Terms of Service or Privacy Policy")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "policy_text": "We reserve the right to collect continuous background telemetry, device sensors, and sell personal identifiers to third-party data brokers indefinitely."
+            }
+        }
+    }
 
 
 class ScanResultResponse(BaseModel):
@@ -66,6 +90,28 @@ class ScanResultResponse(BaseModel):
     exposed_pii: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
     disclaimer: str = Field(default=MANDATORY_SAFETY_DISCLAIMER)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "scan_type": "message",
+                "risk_level": "High",
+                "risk_score": 85,
+                "summary": "This message exhibits strong indicators of a malicious phishing scam attempting to harvest credentials.",
+                "detected_threats": [
+                    "Urgent pressure tactic designed to prompt immediate action",
+                    "Financial or official institution impersonation pattern detected",
+                    "Deceptive call-to-action attempting credential harvesting"
+                ],
+                "exposed_pii": [],
+                "recommendations": [
+                    "Do not click on links, download attachments, or call numbers from this message.",
+                    "Report this message or URL to your IT security administrator or cybercrime helpline."
+                ],
+                "disclaimer": MANDATORY_SAFETY_DISCLAIMER
+            }
+        }
+    }
 
 
 # --- Letter Generation Schemas ---
@@ -150,4 +196,23 @@ class UserProfileResponse(BaseModel):
     email: str
     role: str = "individual"
     created_at: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., description="User registered email address")
+    password: str = Field(..., min_length=1, description="Account password")
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="User full legal name")
+    email: str = Field(..., description="Valid email address")
+    password: str = Field(..., min_length=8, description="Password with minimum 8 characters")
+    role: Optional[str] = Field(default="individual", description="User role: individual or admin")
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserProfileResponse
+    message: Optional[str] = "Authentication successful"
 
