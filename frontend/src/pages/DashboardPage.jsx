@@ -17,8 +17,19 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
-  const { user, logout } = useAuth();
-  const displayName = user?.displayName || user?.name || localStorage.getItem('dataraksha_person_name') || 'Kalyani';
+  const { user, isAuthenticated, logout } = useAuth();
+  const displayName =
+    user?.displayName ||
+    user?.name ||
+    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
+    'User';
+
+  const handleLogout = async () => {
+    await logout();
+    if (onNavigate) {
+      onNavigate('home');
+    }
+  };
 
   // Baseline stats matching reference design (can also blend dynamic user scans)
   const stats = [
@@ -130,7 +141,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
           type="button"
           id="dashboard-header-signout-btn"
           className="btn btn-secondary action-sm header-signout-btn"
-          onClick={logout}
+          onClick={handleLogout}
           title="Sign out of DataRaksha AI"
         >
           <LogOut size={15} />

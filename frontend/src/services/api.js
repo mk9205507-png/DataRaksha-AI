@@ -29,8 +29,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      console.warn('API returned 401 Unauthorized. Notifying auth session expiration.');
       localStorage.removeItem('dataraksha_auth_token');
+      localStorage.removeItem('dataraksha_user');
+      localStorage.removeItem('dataraksha_person_name');
+      localStorage.removeItem('dataraksha_saved_email');
       window.dispatchEvent(
         new CustomEvent('dataraksha:unauthorized', {
           detail: {

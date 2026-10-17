@@ -21,8 +21,20 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
   const displayName =
     user?.displayName ||
     user?.name ||
-    localStorage.getItem('dataraksha_person_name') ||
-    'Kalyani';
+    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
+    '';
+
+  const handleProtectedNavigate = (targetTab = 'dashboard') => {
+    if (isAuthenticated) {
+      onNavigate(targetTab);
+    } else {
+      if (onOpenAuth) {
+        onOpenAuth(targetTab, 'Please sign in to continue.');
+      } else {
+        onNavigate('auth');
+      }
+    }
+  };
 
   return (
     <div className="landing-page" id="landing-home">
@@ -64,6 +76,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
                   className="btn btn-ghost landing-btn-signout"
                   onClick={async () => {
                     await logout();
+                    if (onNavigate) onNavigate('home');
                   }}
                   title="Sign Out"
                 >
@@ -76,7 +89,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
                 type="button"
                 id="landing-signin-btn"
                 className="btn btn-secondary landing-btn-signin"
-                onClick={onOpenAuth}
+                onClick={() => (onOpenAuth ? onOpenAuth('dashboard') : onNavigate('auth'))}
               >
                 Sign In
               </button>
@@ -85,7 +98,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               type="button"
               id="landing-getstarted-btn"
               className="btn btn-primary landing-btn-getstarted"
-              onClick={() => onNavigate('dashboard')}
+              onClick={() => handleProtectedNavigate('dashboard')}
             >
               Get Started
             </button>
@@ -121,7 +134,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
                 type="button"
                 id="hero-cta-getstarted"
                 className="btn btn-primary hero-btn-main"
-                onClick={() => onNavigate('email')}
+                onClick={() => handleProtectedNavigate('dashboard')}
               >
                 <span>Get Started</span>
               </button>
@@ -138,7 +151,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-email"
-                onClick={() => onNavigate('email')}
+                onClick={() => handleProtectedNavigate('email')}
                 title="Open Email Safety Scanner"
               >
                 <Mail size={16} className="chip-icon icon-email" />
@@ -148,7 +161,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-url"
-                onClick={() => onNavigate('url')}
+                onClick={() => handleProtectedNavigate('url')}
                 title="Open URL Security Scanner"
               >
                 <Link2 size={16} className="chip-icon icon-url" />
@@ -158,7 +171,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-policy"
-                onClick={() => onNavigate('policy')}
+                onClick={() => handleProtectedNavigate('policy')}
                 title="Open Privacy Policy Simplifier"
               >
                 <FileText size={16} className="chip-icon icon-policy" />
@@ -168,7 +181,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-ai"
-                onClick={() => onNavigate('dashboard')}
+                onClick={() => handleProtectedNavigate('dashboard')}
                 title="View AI Threat Dashboard"
               >
                 <Bot size={16} className="chip-icon icon-ai" />
@@ -236,7 +249,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
           <div className="features-grid">
             <div
               className="feature-card card"
-              onClick={() => onNavigate('email')}
+              onClick={() => handleProtectedNavigate('email')}
               role="button"
               tabIndex={0}
             >
@@ -255,7 +268,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
 
             <div
               className="feature-card card"
-              onClick={() => onNavigate('url')}
+              onClick={() => handleProtectedNavigate('url')}
               role="button"
               tabIndex={0}
             >
@@ -274,7 +287,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
 
             <div
               className="feature-card card"
-              onClick={() => onNavigate('policy')}
+              onClick={() => handleProtectedNavigate('policy')}
               role="button"
               tabIndex={0}
             >
@@ -332,7 +345,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => onNavigate('dashboard')}
+                onClick={() => handleProtectedNavigate('dashboard')}
               >
                 Explore Live Dashboard <ChevronRight size={16} />
               </button>
@@ -356,7 +369,11 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
           <div className="footer-links">
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <button type="button" className="footer-link-btn" onClick={onOpenAuth}>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => (onOpenAuth ? onOpenAuth('dashboard') : onNavigate('auth'))}
+            >
               Sign In
             </button>
           </div>

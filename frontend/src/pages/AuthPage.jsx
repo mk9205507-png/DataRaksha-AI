@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Mail,
@@ -17,11 +17,15 @@ import {
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
 
-export const AuthPage = ({ onAuthSuccess }) => {
+export const AuthPage = ({
+  onAuthSuccess,
+  initialMessage = '',
+  initialMode = 'login',
+}) => {
   const { login, signup, resetPassword } = useAuth();
 
   // Mode: 'login' | 'register'
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState(initialMode);
 
   // Check if user has signed in before
   const savedName = localStorage.getItem('dataraksha_person_name') || '';
@@ -57,7 +61,21 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const [resetSuccess, setResetSuccess] = useState(false);
 
   // Global Alert State
-  const [alert, setAlert] = useState(null);
+  const [alert, setAlert] = useState(
+    initialMessage ? { type: 'info', message: initialMessage } : null
+  );
+
+  useEffect(() => {
+    if (initialMessage) {
+      setAlert({ type: 'info', message: initialMessage });
+    }
+  }, [initialMessage]);
+
+  useEffect(() => {
+    if (initialMode) {
+      setAuthMode(initialMode);
+    }
+  }, [initialMode]);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

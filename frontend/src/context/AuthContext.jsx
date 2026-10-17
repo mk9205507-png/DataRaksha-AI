@@ -33,8 +33,8 @@ export const AuthProvider = ({ children }) => {
     if (rawUser?.name && typeof rawUser.name === 'string' && rawUser.name.trim()) {
       return rawUser.name.trim();
     }
-    // 4. Default to 'Kalyani' (never use email prefix like mk9205507 or user123)
-    return 'Kalyani';
+    // 4. Default if user exists (never use email prefix like mk9205507 or user123)
+    return rawUser ? 'Kalyani' : '';
   };
 
   // Helper to extract or resolve user role
@@ -94,6 +94,8 @@ export const AuthProvider = ({ children }) => {
       setRole('individual');
       localStorage.removeItem('dataraksha_auth_token');
       localStorage.removeItem('dataraksha_user');
+      localStorage.removeItem('dataraksha_person_name');
+      localStorage.removeItem('dataraksha_saved_email');
     }
   };
 
@@ -106,7 +108,6 @@ export const AuthProvider = ({ children }) => {
         const { data, error } = await supabase.auth.getSession();
         if (!error && data?.session) {
           if (mounted) syncAuthState(data.session);
-        } else {
           // 2. Check local persistence fallback (e.g. demo mode or offline development)
           const storedUser = localStorage.getItem('dataraksha_user');
           const storedToken = localStorage.getItem('dataraksha_auth_token');
@@ -116,19 +117,28 @@ export const AuthProvider = ({ children }) => {
               if (mounted) syncAuthState(null, parsedUser);
             } catch {
               localStorage.removeItem('dataraksha_user');
+              localStorage.removeItem('dataraksha_auth_token');
+              if (mounted) syncAuthState(null, null);
             }
+          } else {
+            if (mounted) syncAuthState(null, null);
           }
         }
       } catch (err) {
         console.warn('Supabase auth initialization fallback:', err.message);
         const storedUser = localStorage.getItem('dataraksha_user');
-        if (storedUser) {
+        const storedToken = localStorage.getItem('dataraksha_auth_token');
+        if (storedUser && storedToken) {
           try {
             const parsedUser = JSON.parse(storedUser);
             if (mounted) syncAuthState(null, parsedUser);
           } catch {
             localStorage.removeItem('dataraksha_user');
+            localStorage.removeItem('dataraksha_auth_token');
+            if (mounted) syncAuthState(null, null);
           }
+        } else {
+          if (mounted) syncAuthState(null, null);
         }
       } finally {
         if (mounted) setIsLoading(false);
@@ -410,6 +420,10 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Signout warning:', err.message);
     } finally {
+      localStorage.removeItem('dataraksha_auth_token');
+      localStorage.removeItem('dataraksha_user');
+      localStorage.removeItem('dataraksha_person_name');
+      localStorage.removeItem('dataraksha_saved_email');
       syncAuthState(null, null);
     }
   };
@@ -480,7 +494,7 @@ export const AuthProvider = ({ children }) => {
     session,
     token,
     role,
-    isAuthenticated: !!user,
+    isAuthenticated: Boolean(user && (token || localStorage.getItem('dataraksha_auth_token'))),
     isAdmin: role === 'admin',
     isLoading,
     login,

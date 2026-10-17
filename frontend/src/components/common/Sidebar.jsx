@@ -67,9 +67,9 @@ export const Sidebar = ({
     user?.displayName ||
     user?.full_name ||
     user?.name ||
-    localStorage.getItem('dataraksha_person_name') ||
-    'Kalyani';
-  const initial = displayName.charAt(0).toUpperCase();
+    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
+    (isAuthenticated ? 'User' : 'Guest');
+  const initial = (displayName.charAt(0) || 'U').toUpperCase();
 
   return (
     <aside
