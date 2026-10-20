@@ -19,7 +19,8 @@ def generate_token(payload: dict) -> str:
         "role": "individual",
     }
     base_payload.update(payload)
-    return jwt.encode(base_payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
+    secret = settings.SUPABASE_JWT_SECRET or "test-secret-key-at-least-32-bytes-long!!"
+    return jwt.encode(base_payload, secret, algorithm="HS256")
 
 
 # ==============================================================================

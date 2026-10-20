@@ -151,7 +151,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-email"
-                onClick={() => handleProtectedNavigate('email')}
+                onClick={() => onNavigate('email')}
                 title="Open Email Safety Scanner"
               >
                 <Mail size={16} className="chip-icon icon-email" />
@@ -161,7 +161,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-url"
-                onClick={() => handleProtectedNavigate('url')}
+                onClick={() => onNavigate('url')}
                 title="Open URL Security Scanner"
               >
                 <Link2 size={16} className="chip-icon icon-url" />
@@ -171,7 +171,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               <button
                 type="button"
                 className="feature-chip chip-policy"
-                onClick={() => handleProtectedNavigate('policy')}
+                onClick={() => onNavigate('policy')}
                 title="Open Privacy Policy Simplifier"
               >
                 <FileText size={16} className="chip-icon icon-policy" />
@@ -249,7 +249,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
           <div className="features-grid">
             <div
               className="feature-card card"
-              onClick={() => handleProtectedNavigate('email')}
+              onClick={() => onNavigate('email')}
               role="button"
               tabIndex={0}
             >
@@ -268,7 +268,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
 
             <div
               className="feature-card card"
-              onClick={() => handleProtectedNavigate('url')}
+              onClick={() => onNavigate('url')}
               role="button"
               tabIndex={0}
             >
@@ -287,7 +287,7 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
 
             <div
               className="feature-card card"
-              onClick={() => handleProtectedNavigate('policy')}
+              onClick={() => onNavigate('policy')}
               role="button"
               tabIndex={0}
             >
