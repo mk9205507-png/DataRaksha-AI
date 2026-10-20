@@ -70,15 +70,25 @@ class LinkScanRequest(BaseModel):
 
 
 class PolicyScanRequest(BaseModel):
-    policy_text: str = Field(..., description="Raw text of Terms of Service or Privacy Policy")
+    policy_text: Optional[str] = Field(None, description="Raw text of Terms of Service or Privacy Policy")
+    url: Optional[str] = Field(None, description="Website URL to fetch and evaluate privacy policy from")
 
     model_config = {
         "json_schema_extra": {
             "example": {
-                "policy_text": "We reserve the right to collect continuous background telemetry, device sensors, and sell personal identifiers to third-party data brokers indefinitely."
+                "policy_text": "We reserve the right to collect continuous background telemetry, device sensors, and sell personal identifiers to third-party data brokers indefinitely.",
+                "url": "https://example.com/privacy",
             }
         }
     }
+
+
+class PolicyAnalysisDetails(BaseModel):
+    data_collected: List[str] = Field(default_factory=list, description="Categories of personal or device data collected")
+    data_usage: List[str] = Field(default_factory=list, description="How collected information is utilized")
+    third_party_sharing: List[str] = Field(default_factory=list, description="Third-party sharing and advertising monetization")
+    data_retention: Optional[str] = Field(None, description="Retention periods and data purging guidelines")
+    user_rights: List[str] = Field(default_factory=list, description="Statutory user rights and opt-out mechanisms")
 
 
 class ScanResultResponse(BaseModel):
@@ -90,6 +100,10 @@ class ScanResultResponse(BaseModel):
     exposed_pii: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
     disclaimer: str = Field(default=MANDATORY_SAFETY_DISCLAIMER)
+    # Extended fields for rich privacy policy breakdown:
+    policy_analysis: Optional[PolicyAnalysisDetails] = None
+    source_url: Optional[str] = None
+    extracted_preview: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {

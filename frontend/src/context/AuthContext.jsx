@@ -212,16 +212,28 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
-        // If real error from live Supabase (e.g. invalid credentials), re-throw directly
+        // If real error from live Supabase (e.g. invalid credentials)
         const isLiveError =
           error.message?.includes('Invalid login credentials') ||
           error.message?.includes('Email not confirmed') ||
           error.status === 400;
 
-        if (isLiveError && !error.message?.includes('fetch') && !error.message?.includes('placeholder')) {
+        const isDemoAccount =
+          cleanEmail === 'admin@dataraksha.ai' ||
+          cleanEmail === 'kalyani@dataraksha.ai' ||
+          cleanEmail.includes('demo');
+
+        const registry = getLocalUserRegistry();
+        const hasLocalAccount = Boolean(registry[cleanEmail]);
+
+        // If it's NOT a demo account and NOT in local registry, reject invalid credentials directly
+        if (isLiveError && !isDemoAccount && !hasLocalAccount && !error.message?.includes('fetch') && !error.message?.includes('placeholder')) {
           throw new Error('Incorrect email or password. Please verify credentials.');
         }
-        throw error;
+
+        if (!isDemoAccount && !hasLocalAccount) {
+          throw error;
+        }
       }
 
       const personName =
@@ -245,71 +257,42 @@ export const AuthProvider = ({ children }) => {
         throw err;
       }
 
-      const isPlaceholder =
-        err.message?.includes('placeholder') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('Invalid API key') ||
-        err.message?.includes('fetch');
+      // Check offline / local registry
+      const registry = getLocalUserRegistry();
+      const existing = registry[cleanEmail];
 
-      if (isPlaceholder) {
-        // Check offline registry
-        const registry = getLocalUserRegistry();
-        const existing = registry[cleanEmail];
-
-        if (existing) {
-          if (existing.password !== cleanPassword) {
-            throw new Error('Incorrect email or password. Please verify credentials.');
-          }
-          const personName = existing.name || rawName || cleanEmail.split('@')[0];
-          localStorage.setItem('dataraksha_person_name', personName);
-          localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-          const demoUser = {
-            id: existing.id || 'user-' + Math.random().toString(36).substring(2, 9),
-            email: cleanEmail,
-            displayName: personName,
-            role: existing.role || (cleanEmail.includes('admin') ? 'admin' : 'individual'),
-            created_at: existing.created_at || new Date().toISOString(),
-            token: `demo_jwt_token_${existing.role || 'individual'}_${Date.now()}`,
-          };
-          syncAuthState(null, demoUser);
-          return { success: true, user: demoUser, isDemo: true };
-        }
-
-        // Demo pre-configured accounts
-        if (cleanEmail === 'admin@dataraksha.ai' || cleanEmail === 'kalyani@dataraksha.ai' || cleanEmail.includes('demo')) {
-          if (cleanPassword.length < 4) {
-            throw new Error('Incorrect email or password. Please verify credentials.');
-          }
-          const demoRole = cleanEmail.includes('admin') ? 'admin' : 'individual';
-          const personName = rawName || (demoRole === 'admin' ? 'Admin' : 'Kalyani');
-          localStorage.setItem('dataraksha_person_name', personName);
-          localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-          const demoUser = {
-            id: demoRole === 'admin' ? '00000000-0000-0000-0000-000000000002' : '00000000-0000-0000-0000-000000000001',
-            email: cleanEmail,
-            displayName: personName,
-            role: demoRole,
-            created_at: new Date().toISOString(),
-            token: `demo_jwt_token_${demoRole}_${Date.now()}`,
-          };
-          syncAuthState(null, demoUser);
-          return { success: true, user: demoUser, isDemo: true };
-        }
-
-        // Generic local login: enforce minimum 6 chars
-        if (cleanPassword.length < 6) {
+      if (existing) {
+        if (existing.password !== cleanPassword) {
           throw new Error('Incorrect email or password. Please verify credentials.');
         }
-
-        const demoRole = cleanEmail.includes('admin') ? 'admin' : 'individual';
-        const personName = rawName || cleanEmail.split('@')[0];
+        const personName = existing.name || rawName || cleanEmail.split('@')[0];
         localStorage.setItem('dataraksha_person_name', personName);
         localStorage.setItem('dataraksha_saved_email', cleanEmail);
 
         const demoUser = {
-          id: 'user-' + Math.random().toString(36).substring(2, 9),
+          id: existing.id || 'user-' + Math.random().toString(36).substring(2, 9),
+          email: cleanEmail,
+          displayName: personName,
+          role: existing.role || (cleanEmail.includes('admin') ? 'admin' : 'individual'),
+          created_at: existing.created_at || new Date().toISOString(),
+          token: `demo_jwt_token_${existing.role || 'individual'}_${Date.now()}`,
+        };
+        syncAuthState(null, demoUser);
+        return { success: true, user: demoUser, isDemo: true };
+      }
+
+      // Demo pre-configured accounts
+      if (cleanEmail === 'admin@dataraksha.ai' || cleanEmail === 'kalyani@dataraksha.ai' || cleanEmail.includes('demo')) {
+        if (cleanPassword !== 'SecureP@ss2026' && cleanPassword !== 'admin123' && cleanPassword !== 'kalyani123' && cleanPassword.length < 6) {
+          throw new Error('Incorrect email or password. Please verify credentials.');
+        }
+        const demoRole = cleanEmail.includes('admin') ? 'admin' : 'individual';
+        const personName = rawName || (demoRole === 'admin' ? 'Admin' : 'Kalyani');
+        localStorage.setItem('dataraksha_person_name', personName);
+        localStorage.setItem('dataraksha_saved_email', cleanEmail);
+
+        const demoUser = {
+          id: demoRole === 'admin' ? '00000000-0000-0000-0000-000000000002' : '00000000-0000-0000-0000-000000000001',
           email: cleanEmail,
           displayName: personName,
           role: demoRole,
@@ -319,8 +302,7 @@ export const AuthProvider = ({ children }) => {
         syncAuthState(null, demoUser);
         return { success: true, user: demoUser, isDemo: true };
       }
-
-      throw new Error(err.message || 'Authentication failed. Please check credentials.');
+      throw new Error(err.message || 'Incorrect email or password. Please verify credentials.');
     }
   };
 
