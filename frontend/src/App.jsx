@@ -148,10 +148,17 @@ function AppContent() {
   }, [isAuthenticated]);
 
   const handleAuthSuccess = () => {
-
     const targetTab = redirectTabAfterAuth || 'dashboard';
     setRedirectTabAfterAuth(null);
     setAuthNoticeMessage('');
+
+    setGlobalAlert({
+      type: 'success',
+      message: '✓ Sign in successful! Welcome to DataRaksha AI.',
+    });
+    setTimeout(() => {
+      setGlobalAlert((current) => (current?.type === 'success' ? null : current));
+    }, 3500);
 
     if (targetTab === 'admin' && !isAdmin) {
       navigateToTab('dashboard', { replace: true });

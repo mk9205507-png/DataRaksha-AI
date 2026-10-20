@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ServiceUnavailableException,
 )
 from app.services.gemini_service import gemini_service
+from app.services.policy_crawler_service import policy_crawler_service
 from app.services.safe_browsing_service import safe_browsing_service
 from app.services.supabase_service import supabase_service
 
@@ -180,23 +181,57 @@ async def scan_policy(
     user_id: Optional[str] = Depends(get_current_user_id),
 ):
     """
-    Simplifies dense privacy policies and terms of service into plain English bullet points,
-    flagging critical tags: Data Selling, Telemetry, Retention Limits, Biometrics, and Deletion.
+    Evaluates privacy policies and terms of service.
+    Accepts either raw policy text or a website URL. When a URL is provided,
+    safely crawls and extracts readable policy clauses before running AI evaluation.
+    Extracts critical tags: Data Selling, Telemetry, Retention, Biometrics, and Rights.
     """
-    validate_input_length(payload.policy_text)
+    # 1. Determine whether input was provided as URL or text
+    raw_input = (payload.url or payload.policy_text or "").strip()
+    if not raw_input:
+        raise InvalidInputException("Please enter text or a URL to analyze.")
 
+    target_url = None
+    if payload.url and payload.url.strip():
+        target_url = payload.url.strip()
+    elif policy_crawler_service.is_url(raw_input):
+        target_url = raw_input
+
+    # 2. Fetch and extract if URL, otherwise use raw text
+    source_url = None
+    extracted_preview = None
+
+    if target_url:
+        if len(target_url) > 2048:
+            raise PayloadTooLargeException("URL exceeds maximum length limit of 2,048 characters.")
+        crawl_result = await policy_crawler_service.fetch_and_extract_policy(target_url)
+        policy_text = crawl_result["policy_text"]
+        source_url = crawl_result["source_url"]
+        extracted_preview = policy_text[:300]
+    else:
+        validate_input_length(raw_input)
+        policy_text = raw_input
+
+    # 3. Analyze through Gemini AI or heuristic engine
     try:
-        analysis = await gemini_service.simplify_policy(payload.policy_text)
+        analysis = await gemini_service.simplify_policy(policy_text)
     except DataRakshaException:
         raise
     except Exception as exc:
         raise ServiceUnavailableException("Analysis service is temporarily unavailable. Please try again shortly.")
 
+    # 4. Attach URL source metadata if applicable
+    if source_url:
+        analysis["source_url"] = source_url
+    if extracted_preview:
+        analysis["extracted_preview"] = extracted_preview
+
     background_tasks.add_task(
         _record_scan_if_authenticated,
         user_id,
         "policy",
-        payload.policy_text,
+        source_url or policy_text,
         analysis,
     )
     return ScanResultResponse(**analysis)
+

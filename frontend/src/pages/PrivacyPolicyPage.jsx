@@ -7,6 +7,8 @@ import {
   ArrowRight,
   FileCode,
   RotateCcw,
+  Globe,
+  ClipboardPaste,
 } from 'lucide-react';
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
@@ -39,8 +41,10 @@ const POLICY_PRESETS = [
 export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [policyText, setPolicyText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
+  const textareaRef = useRef(null);
   const resultRef = useRef(null);
 
   useEffect(() => {
@@ -51,17 +55,38 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     }
   }, [result]);
 
+  const checkIfUrl = (str) => {
+    const trimmed = (str || '').trim();
+    if (!trimmed || /\n|\r/.test(trimmed)) return false;
+    if (/^https?:\/\//i.test(trimmed)) return true;
+    return !/\s/.test(trimmed) && /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(\/.*)?$/i.test(trimmed);
+  };
+
+  const handleSwitchToManualPaste = () => {
+    setPolicyText('');
+    setAlert({
+      type: 'info',
+      message: 'Website URL cleared. Paste the privacy policy text directly into the box below and click Analyse Policy.',
+    });
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
   const runPolicyScan = async (textToScan) => {
     const trimmed = (textToScan || '').trim();
     if (!trimmed) {
       setAlert({
         type: 'warning',
-        message: 'Please paste privacy policy terms or text to evaluate.',
+        message: 'Please paste privacy policy terms or enter a website URL to evaluate.',
       });
       return;
     }
 
-    if (trimmed.length < 20) {
+    const isUrl = checkIfUrl(trimmed);
+
+    // Text terms need meaningful length, whereas a URL like example.com can be short
+    if (!isUrl && trimmed.length < 20) {
       setAlert({
         type: 'warning',
         message: 'Please provide at least 20 characters of policy terms for an accurate assessment.',
@@ -71,19 +96,37 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
 
     setIsLoading(true);
     setAlert(null);
+    if (isUrl) {
+      setLoadingMessage('Fetching webpage and extracting privacy policy terms...');
+    } else {
+      setLoadingMessage('Analysing privacy policy terms with DataRaksha AI...');
+    }
 
     try {
       const data = await scanService.scanPolicy(trimmed);
       setResult(data);
     } catch (err) {
+      const errMsg =
+        err.message ||
+        err.response?.data?.detail ||
+        'Failed to simplify policy. Please check the text or URL and try again.';
+
       setAlert({
         type: 'error',
-        message:
-          err.response?.data?.detail ||
-          'Failed to simplify policy. Please check the text and try again.',
+        message: errMsg,
+        action: isUrl ? (
+          <button
+            type="button"
+            className="btn btn-secondary action-sm alert-paste-manual-btn"
+            onClick={handleSwitchToManualPaste}
+          >
+            <ClipboardPaste size={14} /> Paste Policy Text Manually
+          </button>
+        ) : null,
       });
     } finally {
       setIsLoading(false);
+      setLoadingMessage('');
     }
   };
 
@@ -103,9 +146,11 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     setAlert(null);
   };
 
+  const isCurrentInputUrl = checkIfUrl(policyText);
+
   return (
     <div className="privacy-policy-page" id="privacy-policy-view">
-      {/* Top Page Header (Matching Reference Screen 4) */}
+      {/* Top Page Header */}
       <div className="inner-page-header">
         <div className="header-title-row">
           <div className="header-icon-box policy-icon-box">
@@ -122,11 +167,12 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
         <Alert
           type={alert.type}
           message={alert.message}
+          action={alert.action}
           onClose={() => setAlert(null)}
         />
       )}
 
-      {/* 2-Column Responsive Layout (Matching Reference Screen 4) */}
+      {/* 2-Column Responsive Layout */}
       <div className="policy-safety-grid">
         {/* Left Column: Textarea Editor & Submit */}
         <div className="policy-main-column">
@@ -150,29 +196,41 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
               ))}
             </div>
 
-            {/* Textarea Input with Character Counter */}
+            {/* Textarea Input with Input Type Badge & Character Counter */}
             <div className="policy-textarea-container">
               <textarea
+                ref={textareaRef}
                 id="policy-input-textarea"
-                className="textarea-field policy-textarea"
+                className={`textarea-field policy-textarea ${isCurrentInputUrl ? 'textarea-url-detected' : ''}`}
                 value={policyText}
                 onChange={(e) => {
                   setPolicyText(e.target.value);
                   if (alert) setAlert(null);
                 }}
-                placeholder="Paste the privacy policy text or enter the website URL"
+                placeholder="Paste the privacy policy text or enter the website URL (e.g. https://example.com/privacy)"
                 rows={8}
                 maxLength={5000}
                 disabled={isLoading}
               />
               <div className="policy-textarea-footer">
+                <div className="policy-input-type-badge">
+                  {isCurrentInputUrl ? (
+                    <span className="input-type-pill url-pill">
+                      <Globe size={13} /> Web URL Detected — DataRaksha will fetch & extract terms
+                    </span>
+                  ) : policyText.trim().length > 0 ? (
+                    <span className="input-type-pill text-pill">
+                      <FileText size={13} /> Policy Text ({policyText.length} chars)
+                    </span>
+                  ) : null}
+                </div>
                 <span className="policy-char-count">
                   {policyText.length}/5000
                 </span>
               </div>
             </div>
 
-            {/* Actions Bar */}
+            {/* Actions Bar & Loading Banner */}
             <div className="policy-actions-bar">
               {policyText && (
                 <button
@@ -193,7 +251,8 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
               >
                 {isLoading ? (
                   <>
-                    <div className="spinner sm" /> Analysing Policy...
+                    <div className="spinner sm" />
+                    <span>{isCurrentInputUrl ? 'Fetching & Analysing...' : 'Analysing Policy...'}</span>
                   </>
                 ) : (
                   <>
@@ -202,7 +261,15 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
                 )}
               </button>
             </div>
+
+            {isLoading && (
+              <div className="policy-loading-banner" id="policy-loading-indicator">
+                <div className="spinner sm" />
+                <span className="loading-message-text">{loadingMessage}</span>
+              </div>
+            )}
           </div>
+
 
           {/* Result Card: Rendered immediately upon analysis */}
           {result && (

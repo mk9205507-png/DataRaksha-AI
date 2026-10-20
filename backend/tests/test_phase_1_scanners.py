@@ -165,6 +165,46 @@ def test_scan_policy_privacy_preserving():
     assert data["risk_level"] == "Low"
 
 
+def test_scan_policy_via_url_success():
+    """Verify that submitting a website URL fetches and analyzes the policy text."""
+    payload = {"url": "https://example.com"}
+    response = client.post("/api/v1/scan/policy", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scan_type"] == "policy"
+    assert "source_url" in data and data["source_url"] == "https://example.com"
+    assert "policy_analysis" in data
+    assert "data_collected" in data["policy_analysis"]
+
+
+def test_scan_policy_via_policy_text_containing_url():
+    """Verify that pasting a URL into the policy_text field is recognized and fetched."""
+    payload = {"policy_text": "example.com"}
+    response = client.post("/api/v1/scan/policy", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scan_type"] == "policy"
+    assert "source_url" in data and "example.com" in data["source_url"]
+
+
+def test_scan_policy_via_unreachable_url_returns_400():
+    """Verify that unreachable website returns clear HTTP 400 with guidance to paste manually."""
+    payload = {"url": "https://unreachable-domain-xyz-nonexistent-1234.com"}
+    response = client.post("/api/v1/scan/policy", json=payload)
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "Could not connect" in detail or "paste the policy text manually" in detail
+
+
+def test_scan_policy_ssrf_protection_blocked():
+    """Verify that private IP / localhost requests are blocked for security."""
+    payload = {"url": "http://127.0.0.1:8000/secret"}
+    response = client.post("/api/v1/scan/policy", json=payload)
+    assert response.status_code in (400, 422)
+    detail = response.json()["detail"]
+    assert "prohibited" in detail.lower() or "valid web address" in detail.lower()
+
+
 # ==============================================================================
 # Module 5: Validation Rules & HTTP Error Handling Tests
 # ==============================================================================

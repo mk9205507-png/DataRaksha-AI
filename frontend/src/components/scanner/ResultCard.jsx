@@ -11,6 +11,12 @@ import {
   FileText,
   ExternalLink,
   ChevronRight,
+  Globe,
+  Database,
+  Activity,
+  Share2,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 const MANDATORY_DISCLAIMER =
@@ -233,6 +239,24 @@ ${disclaimer}`;
         )}
       </div>
 
+      {/* Source URL Banner if policy was fetched from the web */}
+      {report.source_url && (
+        <div className="report-source-banner" id="policy-source-banner">
+          <Globe size={15} className="text-blue" />
+          <span className="source-banner-label">Evaluated from Website:</span>
+          <a
+            href={report.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="source-banner-link"
+            title="Open original webpage in new tab"
+          >
+            <span>{report.source_url}</span>
+            <ExternalLink size={12} />
+          </a>
+        </div>
+      )}
+
       {/* Plain Language Summary Banner */}
       <div className="report-section summary-section" id="summary-section">
         <h4 className="section-title">Plain Language Summary</h4>
@@ -241,9 +265,94 @@ ${disclaimer}`;
         </div>
       </div>
 
+      {/* Detailed Privacy Policy Analysis Breakdown (Requirement 7) */}
+      {report.policy_analysis && (
+        <div className="report-section policy-breakdown-section" id="policy-breakdown-section">
+          <h4 className="section-title">Policy Breakdown & Key Disclosures</h4>
+          <div className="policy-breakdown-grid">
+            {/* 1. Data Collected */}
+            {report.policy_analysis.data_collected?.length > 0 && (
+              <div className="policy-breakdown-card card-data-collected">
+                <div className="breakdown-card-header">
+                  <Database size={16} className="text-blue" />
+                  <h5 className="breakdown-title">Data Collected</h5>
+                </div>
+                <div className="breakdown-pills-wrap">
+                  {report.policy_analysis.data_collected.map((item, idx) => (
+                    <span key={idx} className="breakdown-pill">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 2. How Data is Used */}
+            {report.policy_analysis.data_usage?.length > 0 && (
+              <div className="policy-breakdown-card card-data-usage">
+                <div className="breakdown-card-header">
+                  <Activity size={16} className="text-amber" />
+                  <h5 className="breakdown-title">How Your Data is Used</h5>
+                </div>
+                <ul className="breakdown-bullets">
+                  {report.policy_analysis.data_usage.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 3. Third-Party Sharing & Ad Brokers */}
+            {report.policy_analysis.third_party_sharing?.length > 0 && (
+              <div className="policy-breakdown-card card-third-party">
+                <div className="breakdown-card-header">
+                  <Share2 size={16} className="text-red" />
+                  <h5 className="breakdown-title">Third-Party Sharing & Monetization</h5>
+                </div>
+                <ul className="breakdown-bullets">
+                  {report.policy_analysis.third_party_sharing.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 4. Data Retention */}
+            {report.policy_analysis.data_retention && (
+              <div className="policy-breakdown-card card-retention">
+                <div className="breakdown-card-header">
+                  <Clock size={16} className="text-purple" />
+                  <h5 className="breakdown-title">Data Retention Schedule</h5>
+                </div>
+                <p className="breakdown-desc">{report.policy_analysis.data_retention}</p>
+              </div>
+            )}
+
+            {/* 5. User Rights & Statutory Safeguards */}
+            {report.policy_analysis.user_rights?.length > 0 && (
+              <div className="policy-breakdown-card card-user-rights full-span">
+                <div className="breakdown-card-header">
+                  <CheckCircle2 size={16} className="text-emerald" />
+                  <h5 className="breakdown-title">Your Legal Rights (DPDP Act 2023 / GDPR)</h5>
+                </div>
+                <ul className="breakdown-rights-list">
+                  {report.policy_analysis.user_rights.map((item, idx) => (
+                    <li key={idx} className="right-item">
+                      <Check size={13} className="text-emerald" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Identified Risk Factors / Threats */}
       {detected_threats.length > 0 && (
         <div className="report-section threats-section" id="threats-section">
+
           <h4 className="section-title">
             Identified Risk Factors ({detected_threats.length})
           </h4>

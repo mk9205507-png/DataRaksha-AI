@@ -7,8 +7,6 @@ import {
   EyeOff,
   Shield,
   ArrowRight,
-  Sparkles,
-  RotateCcw,
   CheckCircle2,
   AlertCircle,
   KeyRound,
@@ -28,17 +26,58 @@ export const AuthPage = ({
   const [authMode, setAuthMode] = useState(initialMode);
 
   // Check if user has signed in before
-  const savedName = localStorage.getItem('dataraksha_person_name') || '';
   const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
 
   // ---------------------------------------------------------------------------
   // Login Form State
   // ---------------------------------------------------------------------------
-  const [loginEmail, setLoginEmail] = useState(savedEmail || (savedName ? 'kalyani@dataraksha.ai' : ''));
+  const [loginEmail, setLoginEmail] = useState(savedEmail);
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginErrors, setLoginErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  const handleQuickEmailSignIn = async (customEmail = '') => {
+    const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
+    if (!rawEmail || !rawEmail.includes('@')) {
+      setAlert({
+        type: 'warning',
+        message: 'Please enter a valid email address (e.g. iddhik1208@gmail.com) to continue.',
+      });
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setAlert(null);
+
+    try {
+      let res;
+      if (loginWithGoogle) {
+        res = await loginWithGoogle({ email: rawEmail, name: rawEmail.split('@')[0] });
+      } else {
+        res = await login({ email: rawEmail, password: 'DataRaksha@2026' });
+      }
+
+      setAlert({
+        type: 'success',
+        message: `Welcome, ${rawEmail}! Loading your encrypted security profile...`,
+      });
+
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess(res.user);
+        }
+      }, 400);
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.message || 'Could not complete sign in. Please try again.',
+      });
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleQuickEmailSignIn = async (customEmail = '') => {
     const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
@@ -166,6 +205,10 @@ export const AuthPage = ({
     setAlert(null);
 
     if (!validateLogin()) {
+      setAlert({
+        type: 'error',
+        message: '✗ Sign in failed. Please check your email and password.',
+      });
       return;
     }
 
@@ -178,21 +221,25 @@ export const AuthPage = ({
         password: loginPassword || 'DataRaksha@2026',
       });
 
+      // Display green success notification
       setAlert({
         type: 'success',
-        message: 'Authentication successful! Loading your security shield...',
+        message: '✓ Sign in successful! Welcome to DataRaksha AI.',
       });
+      setIsRedirecting(true);
 
+      // Keep success message visible on Sign In page for 2.2s (~2-3 seconds) before navigating to Dashboard
       setTimeout(() => {
         if (onAuthSuccess) {
           onAuthSuccess(result.user);
         }
-      }, 500);
+      }, 2200);
     } catch (err) {
       setAlert({
         type: 'error',
-        message: err.message || 'Incorrect email or password. Please verify credentials.',
+        message: '✗ Sign in failed. Please check your email and password.',
       });
+      setIsRedirecting(false);
     } finally {
       setIsLoggingIn(false);
     }
@@ -314,14 +361,6 @@ export const AuthPage = ({
     }
   };
 
-  // Quick fill helper for developers / reviewers
-  const handleQuickFill = (name, email) => {
-    setLoginEmail(email);
-    setLoginPassword('SecureP@ss2026');
-    setLoginErrors({});
-    setAlert(null);
-  };
-
   return (
     <div className="auth-page-wrapper" id="auth-page-view">
       <div className="auth-card-panel card">
@@ -352,6 +391,7 @@ export const AuthPage = ({
               setAuthMode('login');
               setShowForgotPassword(false);
               setAlert(null);
+              setIsRedirecting(false);
             }}
           >
             Sign In
@@ -366,6 +406,7 @@ export const AuthPage = ({
               setAuthMode('register');
               setShowForgotPassword(false);
               setAlert(null);
+              setIsRedirecting(false);
             }}
           >
             Create Account
@@ -376,6 +417,7 @@ export const AuthPage = ({
         {alert && (
           <div className="auth-alert-box">
             <Alert
+              id={`auth-${alert.type}-alert`}
               type={alert.type}
               message={alert.message}
               onClose={() => setAlert(null)}
@@ -468,10 +510,15 @@ export const AuthPage = ({
             <button
               id="login-submit-btn"
               type="submit"
-              className="btn btn-primary auth-submit-btn w-full"
-              disabled={isLoggingIn}
+              className={`btn btn-primary auth-submit-btn w-full ${isRedirecting ? 'btn-redirecting' : ''}`}
+              disabled={isLoggingIn || isRedirecting}
             >
-              {isLoggingIn ? (
+              {isRedirecting ? (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>Redirecting to Dashboard...</span>
+                </>
+              ) : isLoggingIn ? (
                 <>
                   <div className="spinner sm" /> Verifying Credentials...
                 </>
@@ -737,7 +784,6 @@ export const AuthPage = ({
             </button>
           </form>
         )}
-
         {/* Quick Demo Pre-fill Pills */}
         <div className="auth-quick-fill-section">
           <span className="quick-fill-label">

@@ -172,6 +172,40 @@ function analyzePolicyLocally(policyText) {
     score += 25;
   }
 
+  // Structured breakdown categories
+  const data_collected = [];
+  if (lower.includes('gps') || lower.includes('location')) data_collected.push('Precise Real-Time GPS & Location Data');
+  if (lower.includes('device') || lower.includes('ip address') || lower.includes('hardware')) data_collected.push('Device Identifiers, IP Address & Telemetry');
+  if (lower.includes('contact') || lower.includes('email') || lower.includes('phone')) data_collected.push('Contact Details (Email, Phone, Name)');
+  if (lower.includes('biometric') || lower.includes('facial') || lower.includes('face')) data_collected.push('Biometric Facial Scans & Sensor Telemetry');
+  if (lower.includes('browsing') || lower.includes('history') || lower.includes('cookies')) data_collected.push('Web Browsing History & Behavioral Footprints');
+  if (data_collected.length === 0) data_collected.push('Account Credentials & Basic Service Identifiers');
+
+  const data_usage = [];
+  if (lower.includes('advertising') || lower.includes('marketing') || lower.includes('profiling')) {
+    data_usage.push('Targeted advertising, marketing analytics, and consumer profiling');
+  }
+  if (lower.includes('service') || lower.includes('operate') || lower.includes('deliver')) {
+    data_usage.push('Delivering core platform functionality and user account management');
+  }
+  if (data_usage.length === 0) data_usage.push('Delivering and maintaining core platform functionality');
+
+  const third_party_sharing = [];
+  if (lower.includes('sell') || lower.includes('data broker') || lower.includes('third-party advertising')) {
+    third_party_sharing.push('Third-party data brokers, advertising networks, and commercial affiliates');
+  }
+  third_party_sharing.push('Essential infrastructure cloud hosting and technical operational vendors');
+
+  const data_retention = lower.includes('indefinitely') || lower.includes('perpetual')
+    ? 'Data is retained indefinitely on commercial cloud servers with no mandatory scheduled purging.'
+    : 'Retained for active account duration and statutory legal compliance.';
+
+  const user_rights = [
+    'Right to request access and an export copy of personal records',
+    'Right to request erasure and complete deletion under Indian DPDP Act 2023 / GDPR',
+    'Right to opt out of third-party marketing and behavioral ad tracking',
+  ];
+
   const finalScore = Math.min(100, score);
   let riskLevel = 'Low';
   let summary = 'Standard operational privacy policy without aggressive commercial telemetry detected.';
@@ -196,6 +230,13 @@ function analyzePolicyLocally(policyText) {
     detected_threats: threats,
     exposed_pii: [],
     recommendations,
+    policy_analysis: {
+      data_collected,
+      data_usage,
+      third_party_sharing,
+      data_retention,
+      user_rights,
+    },
     disclaimer: 'No obvious risks were detected; however, this does not guarantee the content is completely safe. Always exercise caution when sharing sensitive information online.'
   };
 }
@@ -240,18 +281,37 @@ export const scanService = {
 
   /**
    * Evaluates privacy policies and extracts data broker, telemetry, and retention risks.
-   * @param {string} policy_text - Terms or privacy policy text
+   * Accepts either raw policy text or a website URL to fetch and evaluate.
+   * @param {string} input - Terms/privacy policy text OR a website URL
    * @returns {Promise<Object>} ScanResultResponse
    */
-  scanPolicy: async (policy_text) => {
+  scanPolicy: async (input) => {
+    const trimmed = (input || '').trim();
+    const isUrl =
+      /^https?:\/\//i.test(trimmed) ||
+      (!/\s/.test(trimmed) && /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(\/.*)?$/i.test(trimmed));
+
+    const payload = isUrl ? { url: trimmed } : { policy_text: trimmed };
+
     try {
-      const response = await apiClient.post('/scan/policy', { policy_text });
+      const response = await apiClient.post('/scan/policy', payload);
       return response.data;
     } catch (err) {
+      // If backend returned a clear validation or extraction error, preserve and surface it!
+      if (err.response?.data?.detail) {
+        throw new Error(err.response.data.detail);
+      }
+      // If network is down and user submitted a URL, inform them to start backend or paste text manually
+      if (isUrl) {
+        throw new Error(
+          'Cannot fetch website URL while backend service is offline. Please start the backend server or copy and paste the policy text manually below.'
+        );
+      }
       console.warn('Backend /scan/policy failed, using intelligent client-side analyzer fallback:', err);
-      return analyzePolicyLocally(policy_text);
+      return analyzePolicyLocally(trimmed);
     }
   },
 };
+
 
 export default scanService;
