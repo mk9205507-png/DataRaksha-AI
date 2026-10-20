@@ -119,12 +119,16 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserC
 
 async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[UserContext]:
     """
-    Returns authenticated user if Authorization header is present; None for anonymous requests.
-    Raises HTTP 401 if header is present but token is invalid or expired.
+    Returns authenticated user if Authorization header is present and valid; None for anonymous requests.
+    Gracefully returns None if token is invalid or expired so public endpoints do not fail.
     """
     if not authorization:
         return None
-    return await get_current_user(authorization)
+    try:
+        return await get_current_user(authorization)
+    except HTTPException:
+        logger.info("Optional authorization token invalid or expired. Treating as anonymous guest.")
+        return None
 
 
 async def get_current_user_id(authorization: Optional[str] = Header(None)) -> Optional[str]:

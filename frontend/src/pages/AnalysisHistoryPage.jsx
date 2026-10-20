@@ -277,7 +277,7 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
 
                 <div className="history-card-right">
                   <span className={`risk-badge ${item.badgeClass}`}>
-                    {item.risk_level} Risk
+                    {item.risk_level} Risk {typeof item.risk_score === 'number' ? `(${item.risk_score}/100)` : ''}
                   </span>
                   <ChevronRight size={18} className="history-item-chevron text-muted" />
                 </div>

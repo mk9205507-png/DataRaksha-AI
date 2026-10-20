@@ -16,11 +16,22 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
   const displayName =
     user?.displayName ||
     user?.name ||
+    user?.full_name ||
     (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
-    'vaishnavi';
+    (user?.email ? user.email.split('@')[0] : 'User');
 
-  // Baseline stats matching reference design (can also blend dynamic user scans)
+  // Baseline stats matching reference design with Digital Safety Score
   const stats = [
+    {
+      id: 'score',
+      label: 'Digital Safety Score',
+      value: '84/100',
+      subtext: 'High Protection Level',
+      icon: ShieldCheck,
+      colorClass: 'green',
+      barColor: '#10b981',
+      progressPercent: 84,
+    },
     {
       id: 'total',
       label: 'Total Analyses',
@@ -29,6 +40,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
       icon: Layers,
       colorClass: 'blue',
       barColor: '#2563eb',
+      progressPercent: 100,
     },
     {
       id: 'high-risk',
@@ -38,6 +50,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
       icon: ShieldAlert,
       colorClass: 'red',
       barColor: '#ef4444',
+      progressPercent: 17,
     },
     {
       id: 'low-risk',
@@ -47,6 +60,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
       icon: ShieldCheck,
       colorClass: 'green',
       barColor: '#10b981',
+      progressPercent: 50,
     },
   ];
 
@@ -144,7 +158,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
                   className="stat-progress-bar"
                   style={{
                     backgroundColor: stat.barColor,
-                    width: `${Math.min(100, (stat.value / 12) * 100)}%`,
+                    width: `${typeof stat.progressPercent === 'number' ? stat.progressPercent : Math.min(100, (Number(stat.value) / 12) * 100)}%`,
                   }}
                 ></div>
               </div>

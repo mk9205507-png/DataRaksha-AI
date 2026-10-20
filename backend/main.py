@@ -18,6 +18,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,6 +33,12 @@ app.include_router(api_v1_router, prefix="/api/v1")
     response_model=HealthResponse,
     tags=["System Health"],
     summary="Health Check Endpoint",
+)
+@app.get(
+    "/api/v1/health",
+    response_model=HealthResponse,
+    tags=["System Health"],
+    summary="API v1 Health Check Endpoint",
 )
 async def health_check():
     """Returns the operational status of the DataRaksha AI backend service."""

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     # Server Settings
     PORT: int = 8000
     ENVIRONMENT: str = "development"
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5174,http://127.0.0.1:5174"
 
     # AI & Threat Intelligence APIs
     GEMINI_API_KEY: str = ""
@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
+
+    # Google OAuth 2.0 & Gmail API Settings
+    GOOGLE_CLIENT_ID: str = "1083257758857-um0n173p6sab1kic6b06g1qtrvnv5vaj.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/gmail/callback"
+    FRONTEND_URL: str = "http://localhost:5173"
+    GMAIL_STATE_SECRET: str = "dataraksha-gmail-oauth-state-secret-key"
 
     # Pydantic v2 configuration
     model_config = SettingsConfigDict(

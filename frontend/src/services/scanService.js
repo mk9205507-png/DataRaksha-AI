@@ -5,7 +5,8 @@ import apiClient from './api';
  * Matches the backend Gemini / Heuristic rules so results are always available.
  */
 function analyzeMessageLocally(content) {
-  const text = (content || '').toLowerCase();
+  const safeContent = typeof content === 'string' ? content : (content?.content || String(content || ''));
+  const text = safeContent.toLowerCase();
   const threats = [];
   const pii = [];
   const recommendations = [];
@@ -52,11 +53,11 @@ function analyzeMessageLocally(content) {
   }
 
   // 5. PII Detection (Indian PAN, Aadhaar hints, Card patterns, Email, Phone)
-  const phoneMatch = content.match(/(?:\+91|0)?[6-9]\d{9}/);
+  const phoneMatch = safeContent.match(/(?:\+91|0)?[6-9]\d{9}/);
   if (phoneMatch) {
     pii.push({ type: 'Phone Number', value: phoneMatch[0] });
   }
-  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const emailMatch = safeContent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) {
     pii.push({ type: 'Email Address', value: emailMatch[0] });
   }

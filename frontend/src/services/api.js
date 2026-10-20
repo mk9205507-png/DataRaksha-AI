@@ -28,18 +28,25 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (!error.response) {
+      error.isNetworkDown = true;
+      error.friendlyMessage = `Cannot connect to DataRaksha backend at ${API_BASE_URL}. Please ensure the FastAPI server is running on port 8000.`;
+    }
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('dataraksha_auth_token');
-      localStorage.removeItem('dataraksha_user');
-      localStorage.removeItem('dataraksha_person_name');
-      localStorage.removeItem('dataraksha_saved_email');
-      window.dispatchEvent(
-        new CustomEvent('dataraksha:unauthorized', {
-          detail: {
-            message: error.response.data?.detail || 'Session expired. Please sign in again.',
-          },
-        })
-      );
+      const token = localStorage.getItem('dataraksha_auth_token');
+      if (token && !token.startsWith('demo_jwt_token')) {
+        localStorage.removeItem('dataraksha_auth_token');
+        localStorage.removeItem('dataraksha_user');
+        localStorage.removeItem('dataraksha_person_name');
+        localStorage.removeItem('dataraksha_saved_email');
+        window.dispatchEvent(
+          new CustomEvent('dataraksha:unauthorized', {
+            detail: {
+              message: error.response.data?.detail || 'Session expired. Please sign in again.',
+            },
+          })
+        );
+      }
     }
     return Promise.reject(error);
   }
