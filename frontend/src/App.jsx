@@ -14,15 +14,29 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Shield, Menu, X, ArrowLeft } from 'lucide-react';
 import './App.css';
 
-// Protected routes requiring active authentication
-const PROTECTED_TABS = ['dashboard', 'email', 'url', 'policy', 'history', 'letters', 'admin'];
+// Protected routes requiring active authentication (scanners: email, url, policy are public)
+const PROTECTED_TABS = ['dashboard', 'history', 'letters', 'admin'];
 
-// Helper to determine the target tab from window hash
+// Helper to determine the target tab from window hash or direct pathname
 const getTabFromHash = () => {
   if (typeof window === 'undefined') return 'home';
-  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+
+  // 1. Direct path routing fallback (e.g. /email-safety, /email, /url, /dashboard)
+  const path = window.location.pathname.replace(/^\//, '').toLowerCase().trim();
+  if (path === 'email-safety' || path === 'email') return 'email';
+  if (path === 'url-safety' || path === 'url') return 'url';
+  if (path === 'privacy-policy' || path === 'policy') return 'policy';
+  if (path === 'dashboard') return 'dashboard';
+  if (path === 'history') return 'history';
+  if (path === 'letters') return 'letters';
+  if (path === 'admin') return 'admin';
+  if (path === 'auth') return 'auth';
+
+  // 2. Hash routing: strip leading # and any trailing query params (e.g. #email?gmail_connected=true -> email)
+  const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+  const cleanHash = rawHash.split('?')[0].split('&')[0];
   const validTabs = ['home', 'auth', 'dashboard', 'email', 'url', 'policy', 'history', 'letters', 'admin'];
-  return validTabs.includes(hash) ? hash : 'home';
+  return validTabs.includes(cleanHash) ? cleanHash : 'home';
 };
 
 function AppContent() {
@@ -78,21 +92,24 @@ function AppContent() {
   useEffect(() => {
     const handleUnauthorized = (e) => {
       const msg = e.detail?.message || 'Session expired. Please sign in again.';
-      setGlobalAlert({
-        type: 'warning',
-        message: msg,
-      });
-      navigateToTab('auth', {
-        replace: true,
-        notice: msg,
-      });
+      // Only redirect to auth view if user is currently on a protected tab
+      if (PROTECTED_TABS.includes(activeTab)) {
+        setGlobalAlert({
+          type: 'warning',
+          message: msg,
+        });
+        navigateToTab('auth', {
+          replace: true,
+          notice: msg,
+        });
+      }
     };
 
     window.addEventListener('dataraksha:unauthorized', handleUnauthorized);
     return () => {
       window.removeEventListener('dataraksha:unauthorized', handleUnauthorized);
     };
-  }, []);
+  }, [activeTab]);
 
   // Central Route Guard: Re-evaluate when activeTab or isAuthenticated changes
   useEffect(() => {
@@ -213,15 +230,16 @@ function AppContent() {
       case 'email':
         return (
           <EmailSafetyPage
-            onNavigateBack={() => navigateToTab('dashboard')}
+            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
+            onOpenAuth={(targetTab, msg) => handleOpenAuth(targetTab, msg)}
           />
         );
 
       case 'url':
         return (
           <UrlSafetyPage
-            onNavigateBack={() => navigateToTab('dashboard')}
+            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
           />
         );
@@ -229,7 +247,7 @@ function AppContent() {
       case 'policy':
         return (
           <PrivacyPolicyPage
-            onNavigateBack={() => navigateToTab('dashboard')}
+            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
           />
         );

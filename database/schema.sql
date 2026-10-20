@@ -36,6 +36,19 @@ CREATE TABLE IF NOT EXISTS public.data_request_letters (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 4. User Gmail Connections Table (Secure server-side token storage)
+CREATE TABLE IF NOT EXISTS public.user_gmail_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    access_token TEXT,
+    token_expiry TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_user_gmail_connection UNIQUE (user_id)
+);
+
 -- ==============================================================================
 -- Row-Level Security (RLS) Policies
 -- ==============================================================================
@@ -43,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.data_request_letters (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scan_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.data_request_letters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_gmail_connections ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
 DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
@@ -64,6 +78,13 @@ CREATE POLICY "Users delete own scans" ON public.scan_history FOR DELETE USING (
 -- Data Request Letters Policies
 DROP POLICY IF EXISTS "Users manage own letters" ON public.data_request_letters;
 CREATE POLICY "Users manage own letters" ON public.data_request_letters FOR ALL USING (auth.uid() = user_id);
+
+-- User Gmail Connections Policies
+DROP POLICY IF EXISTS "Users view own gmail connection" ON public.user_gmail_connections;
+CREATE POLICY "Users view own gmail connection" ON public.user_gmail_connections FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage own gmail connection" ON public.user_gmail_connections;
+CREATE POLICY "Users manage own gmail connection" ON public.user_gmail_connections FOR ALL USING (auth.uid() = user_id);
 
 -- ==============================================================================
 -- Automatic Profile Creation Trigger on Auth Signup

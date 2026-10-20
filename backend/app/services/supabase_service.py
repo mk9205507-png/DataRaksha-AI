@@ -13,6 +13,7 @@ class SupabaseService:
         self.key = settings.SUPABASE_KEY
         self._client = None
         self._mock_scans: Dict[str, List[Dict[str, Any]]] = {}
+        self._mock_gmail_connections: Dict[str, Dict[str, Any]] = {}
 
         if self.url and self.key and "placeholder" not in self.url:
             try:
@@ -180,6 +181,124 @@ class SupabaseService:
         except Exception as e:
             logger.warning(f"Could not fetch profile for user {user_id}: {e}")
             return None
+
+    async def save_gmail_connection(
+        self,
+        user_id: str,
+        email: str,
+        refresh_token: str,
+        access_token: Optional[str] = None,
+        token_expiry: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Stores or updates a user's Gmail OAuth connection credentials."""
+        user_id_str = str(user_id)
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        record = {
+            "user_id": user_id_str,
+            "email": email,
+            "refresh_token": refresh_token,
+            "access_token": access_token,
+            "token_expiry": token_expiry,
+            "updated_at": now_iso,
+        }
+
+        # Keep in-memory mock store updated
+        self._mock_gmail_connections[user_id_str] = {**record, "created_at": now_iso}
+
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str:
+            return self._mock_gmail_connections[user_id_str]
+
+        try:
+            # Upsert into user_gmail_connections table using on_conflict="user_id"
+            res = (
+                self._client.table("user_gmail_connections")
+                .upsert(record, on_conflict="user_id")
+                .execute()
+            )
+            return res.data[0] if res.data else self._mock_gmail_connections[user_id_str]
+        except Exception as e:
+            logger.error(f"Failed to persist user_gmail_connection for user {user_id}: {e}")
+            # Fall back to in-memory store so user flow never breaks
+            return self._mock_gmail_connections[user_id_str]
+
+    async def get_gmail_connection(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Fetches stored Gmail credentials for authenticated user."""
+        user_id_str = str(user_id)
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str in self._mock_gmail_connections:
+            return self._mock_gmail_connections.get(user_id_str)
+
+        try:
+            res = (
+                self._client.table("user_gmail_connections")
+                .select("*")
+                .eq("user_id", user_id_str)
+                .maybe_single()
+                .execute()
+            )
+            if res and res.data:
+                return res.data
+            return self._mock_gmail_connections.get(user_id_str)
+        except Exception as e:
+            logger.warning(f"Could not fetch user_gmail_connections for user {user_id}: {e}")
+            return self._mock_gmail_connections.get(user_id_str)
+
+    async def update_gmail_access_token(
+        self,
+        user_id: str,
+        access_token: str,
+        token_expiry: Optional[str] = None,
+    ) -> bool:
+        """Updates refreshed access token and expiry for a user."""
+        user_id_str = str(user_id)
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        if user_id_str in self._mock_gmail_connections:
+            self._mock_gmail_connections[user_id_str]["access_token"] = access_token
+            self._mock_gmail_connections[user_id_str]["token_expiry"] = token_expiry
+            self._mock_gmail_connections[user_id_str]["updated_at"] = now_iso
+
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str:
+            return True
+
+        try:
+            res = (
+                self._client.table("user_gmail_connections")
+                .update({
+                    "access_token": access_token,
+                    "token_expiry": token_expiry,
+                    "updated_at": now_iso,
+                })
+                .eq("user_id", user_id_str)
+                .execute()
+            )
+            return len(res.data) > 0 if res.data else True
+        except Exception as e:
+            logger.error(f"Failed to update Gmail access token for {user_id}: {e}")
+            return False
+
+    async def delete_gmail_connection(self, user_id: str) -> bool:
+        """Removes user's Gmail connection and stored tokens."""
+        user_id_str = str(user_id)
+        if user_id_str in self._mock_gmail_connections:
+            del self._mock_gmail_connections[user_id_str]
+
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str:
+            return True
+
+        try:
+            res = (
+                self._client.table("user_gmail_connections")
+                .delete()
+                .eq("user_id", user_id_str)
+                .execute()
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete Gmail connection for {user_id}: {e}")
+            return False
 
 
 supabase_service = SupabaseService()

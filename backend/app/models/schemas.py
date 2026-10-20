@@ -216,3 +216,32 @@ class AuthTokenResponse(BaseModel):
     user: UserProfileResponse
     message: Optional[str] = "Authentication successful"
 
+
+# --- Gmail OAuth & Integration Schemas ---
+
+class GmailAuthUrlResponse(BaseModel):
+    auth_url: str = Field(..., description="Google OAuth 2.0 authorization URL for consent flow")
+
+
+class GmailStatusResponse(BaseModel):
+    connected: bool = Field(..., description="True if user has an active Gmail integration")
+    email: Optional[str] = Field(None, description="Connected Gmail address")
+    created_at: Optional[str] = Field(None, description="Timestamp when Gmail was connected")
+
+
+class GmailEmailItem(BaseModel):
+    id: str
+    thread_id: Optional[str] = None
+    subject: str
+    sender: str
+    date: str
+    snippet: str
+    content: str
+
+
+class GmailAnalyzeRequest(BaseModel):
+    content: str = Field(..., description="Email body to scan for phishing/threats")
+    sender: Optional[str] = Field(None, description="Sender address")
+    subject: Optional[str] = Field(None, description="Email subject line")
+
+
