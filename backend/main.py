@@ -34,6 +34,12 @@ app.include_router(api_v1_router, prefix="/api/v1")
     tags=["System Health"],
     summary="Health Check Endpoint",
 )
+@app.get(
+    "/api/v1/health",
+    response_model=HealthResponse,
+    tags=["System Health"],
+    summary="API v1 Health Check Endpoint",
+)
 async def health_check():
     """Returns the operational status of the DataRaksha AI backend service."""
     return HealthResponse(
