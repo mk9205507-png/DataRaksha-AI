@@ -11,6 +11,8 @@ import {
   AlertCircle,
   KeyRound,
   ShieldCheck,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +29,7 @@ export const AuthPage = ({
 
   // Check if user has signed in before
   const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
+  const savedName = localStorage.getItem('dataraksha_person_name') || '';
 
   // ---------------------------------------------------------------------------
   // Login Form State
@@ -37,6 +40,14 @@ export const AuthPage = ({
   const [loginErrors, setLoginErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Quick fill helper for developers / reviewers
+  const handleQuickFill = (name, email) => {
+    setLoginEmail(email);
+    setLoginPassword('SecureP@ss2026');
+    setLoginErrors({});
+    setAlert(null);
+  };
 
   const handleQuickEmailSignIn = async (customEmail = '') => {
     const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
