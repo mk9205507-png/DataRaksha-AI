@@ -10,165 +10,111 @@ import {
   X,
   ExternalLink,
   Filter,
+  Search,
+  RotateCcw,
+  FileCode,
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
-import apiClient from '../services/api';
+import { historyService } from '../services/historyService';
+import { useAuth } from '../context/AuthContext';
 
-// Baseline records from Reference Screen 6 + dynamic backend integration
-const INITIAL_HISTORY = [
-  {
-    id: 'hist-1',
-    scan_type: 'email',
-    title: 'Email Analysis',
-    timestamp: '16 Oct 2026, 2:30 PM',
-    risk_level: 'High',
-    risk_score: 92,
-    badgeClass: 'risk-badge-high',
-    icon: Mail,
-    iconColor: 'blue',
-    preview:
-      'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately or call +91-9876543210 to verify your Aadhaar, PAN and PIN within 2 hours...',
-    summary:
-      'Urgency coercion heuristics, bank impersonation, and deceptive verification URL detected.',
-    threats: ['Phishing Urgency Cue', 'Unverified Financial Domain', 'PII Harvest Attempt (PAN, PIN)'],
-  },
-  {
-    id: 'hist-2',
-    scan_type: 'url',
-    title: 'URL Analysis',
-    timestamp: '16 Oct 2026, 11:30 AM',
-    risk_level: 'Low',
-    risk_score: 8,
-    badgeClass: 'risk-badge-low',
-    icon: Link2,
-    iconColor: 'blue',
-    preview: 'https://google.com',
-    summary: 'Domain verified against Google Safe Browsing and legitimate HTTPS SSL certificates.',
-    threats: ['No threats detected'],
-  },
-  {
-    id: 'hist-3',
-    scan_type: 'policy',
-    title: 'Privacy Policy',
-    timestamp: '15 Oct 2026, 4:15 PM',
-    risk_level: 'Medium',
-    risk_score: 65,
-    badgeClass: 'risk-badge-medium',
-    icon: FileText,
-    iconColor: 'amber',
-    preview:
-      'We collect your exact GPS location, browser history, microphone telemetry, and share with third-party advertising brokers indefinitely without mandatory prior notice...',
-    summary: 'Policy contains aggressive data broker monetization and perpetual audio telemetry retention.',
-    threats: ['Data Broker Monetization', 'Real-time GPS Tracking', 'Ambient Audio Telemetry'],
-  },
-  {
-    id: 'hist-4',
-    scan_type: 'email',
-    title: 'Email Analysis',
-    timestamp: '14 Oct 2026, 1:10 PM',
-    risk_level: 'Low',
-    risk_score: 12,
-    badgeClass: 'risk-badge-low',
-    icon: Mail,
-    iconColor: 'blue',
-    preview:
-      'Hi Kalyani, please remember our sprint review sync today at 3:00 PM via Google Meet. The project slides and architecture notes have been shared in the team workspace.',
-    summary: 'Clean business communication. No phishing indicators or sensitive data exposed.',
-    threats: ['No threats detected'],
-  },
-  {
-    id: 'hist-5',
-    scan_type: 'url',
-    title: 'URL Analysis',
-    timestamp: '13 Oct 2026, 3:45 PM',
-    risk_level: 'Medium',
-    risk_score: 55,
-    badgeClass: 'risk-badge-medium',
-    icon: Link2,
-    iconColor: 'blue',
-    preview: 'http://bit.ly/claim-bank-cashback-instant',
-    summary: 'Shortened obfuscated link redirecting to unverified landing page.',
-    threats: ['URL Shortener Obfuscation', 'Unencrypted HTTP Protocol'],
-  },
-];
-
-export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
-  const [historyList, setHistoryList] = useState(INITIAL_HISTORY);
+export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateToLetters }) => {
+  const { isAuthenticated, user } = useAuth();
+  const [historyList, setHistoryList] = useState(() => historyService.getStoredScans());
   const [selectedItem, setSelectedItem] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [alert, setAlert] = useState(null);
 
-  // Sync with backend /history if available
+  // Sync with remote /history if authenticated, and listen for live updates
   useEffect(() => {
-    const fetchRemoteHistory = async () => {
+    // 1. Initial local load
+    setHistoryList(historyService.getStoredScans());
+
+    // 2. Remote sync if authenticated
+    const syncRemote = async () => {
       try {
-        const res = await apiClient.get('/history');
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          // Normalize backend records into reference design format
-          const formatted = res.data.map((item, idx) => {
-            const isEmail = item.scan_type === 'message' || item.scan_type === 'email';
-            const isUrl = item.scan_type === 'link' || item.scan_type === 'url';
-            const isPolicy = item.scan_type === 'policy';
-            const riskLevel = item.risk_level || 'Low';
-            return {
-              id: item.id || `remote-${idx}`,
-              scan_type: isEmail ? 'email' : isUrl ? 'url' : 'policy',
-              title: isEmail ? 'Email Analysis' : isUrl ? 'URL Analysis' : 'Privacy Policy',
-              timestamp: item.created_at
-                ? new Date(item.created_at).toLocaleString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })
-                : 'Recent',
-              risk_level: riskLevel,
-              risk_score: item.risk_score || 0,
-              badgeClass:
-                riskLevel === 'High'
-                  ? 'risk-badge-high'
-                  : riskLevel === 'Medium'
-                  ? 'risk-badge-medium'
-                  : 'risk-badge-low',
-              icon: isEmail ? Mail : isUrl ? Link2 : FileText,
-              iconColor: isPolicy ? 'amber' : 'blue',
-              preview: item.input_preview || item.content || '',
-              summary: item.summary || 'Threat scan completed.',
-              threats: item.detected_threats || [],
-            };
-          });
-          setHistoryList(formatted);
+        const synced = await historyService.fetchAndSyncHistory();
+        if (Array.isArray(synced)) {
+          setHistoryList(synced);
         }
-      } catch {
-        // Retain initial reference history
+      } catch (e) {
+        console.warn('History sync warning:', e);
+      }
+    };
+    syncRemote();
+
+    // 3. Live event listener for scans added across other tabs/pages
+    const handleHistoryUpdate = (e) => {
+      if (Array.isArray(e.detail?.allRecords)) {
+        setHistoryList(e.detail.allRecords);
+      } else {
+        setHistoryList(historyService.getStoredScans());
       }
     };
 
-    fetchRemoteHistory();
-  }, []);
+    window.addEventListener('dataraksha:history_updated', handleHistoryUpdate);
+    return () => {
+      window.removeEventListener('dataraksha:history_updated', handleHistoryUpdate);
+    };
+  }, [isAuthenticated]);
 
   const handleDelete = async (id, e) => {
     if (e) e.stopPropagation();
+    await historyService.deleteStoredScan(id);
     setHistoryList((prev) => prev.filter((item) => item.id !== id));
     if (selectedItem?.id === id) setSelectedItem(null);
     setAlert({ type: 'info', message: 'Analysis record removed from your history.' });
+  };
 
-    try {
-      await apiClient.delete(`/history/${id}`);
-    } catch {
-      // Backend deletion endpoint handled gracefully
+  const handleClearAll = async () => {
+    await historyService.clearAllStoredScans();
+    setHistoryList([]);
+    setSelectedItem(null);
+    setShowClearConfirm(false);
+    setAlert({ type: 'info', message: 'All scan history records have been permanently cleared.' });
+  };
+
+  const handleReopenInScanner = (item) => {
+    if (onReopenScan) {
+      onReopenScan(item);
+    }
+  };
+
+  const handleDraftNotice = (item) => {
+    if (onNavigateToLetters) {
+      onNavigateToLetters({
+        company_name: item.target_company || 'Identified Organization',
+        custom_notes: item.summary,
+      });
     }
   };
 
   const filteredItems = historyList.filter((item) => {
-    if (filterType === 'all') return true;
-    if (filterType === 'email') return item.scan_type === 'email';
-    if (filterType === 'url') return item.scan_type === 'url';
-    if (filterType === 'policy') return item.scan_type === 'policy';
-    if (filterType === 'high') return item.risk_level === 'High';
-    if (filterType === 'low') return item.risk_level === 'Low';
+    // 1. Filter by category
+    if (filterType === 'email' && item.scan_type !== 'email') return false;
+    if (filterType === 'url' && item.scan_type !== 'url') return false;
+    if (filterType === 'policy' && item.scan_type !== 'policy') return false;
+    if (filterType === 'high' && item.risk_level !== 'High') return false;
+    if (filterType === 'medium' && item.risk_level !== 'Medium') return false;
+    if (filterType === 'low' && item.risk_level !== 'Low') return false;
+
+    // 2. Keyword Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchPreview = (item.preview || '').toLowerCase().includes(q);
+      const matchSummary = (item.summary || '').toLowerCase().includes(q);
+      const matchTitle = (item.title || '').toLowerCase().includes(q);
+      const matchThreats = (item.threats || []).some((t) => t.toLowerCase().includes(q));
+      if (!matchPreview && !matchSummary && !matchTitle && !matchThreats) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -184,10 +130,10 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
           aria-label="Back"
         >
           <ArrowLeft size={18} />
-          <h1 className="header-title">Analysis History</h1>
+          <h1 className="header-title">Scan History</h1>
         </button>
         <p className="header-subtitle">
-          View your past analyses and results.
+          View and manage your past security threat analyses and privacy audit logs.
         </p>
       </div>
 
@@ -198,6 +144,43 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
           onClose={() => setAlert(null)}
         />
       )}
+
+      {/* Audit Trail Toolbar: Search & Clear All */}
+      <div className="history-search-row">
+        <div className="history-search-input-wrapper">
+          <Search size={16} className="history-search-icon text-muted" />
+          <input
+            id="history-search-bar"
+            type="text"
+            className="input-field history-search-input"
+            placeholder="Search past scans, URLs, keywords, or threats..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="history-search-clear"
+              onClick={() => setSearchQuery('')}
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {historyList.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-ghost text-red action-sm history-clear-all-btn"
+            onClick={() => setShowClearConfirm(true)}
+            title="Clear all stored history"
+          >
+            <Trash2 size={15} />
+            <span>Clear All</span>
+          </button>
+        )}
+      </div>
 
       {/* Filter Chips Bar */}
       <div className="history-filter-bar">
@@ -238,6 +221,13 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
         </button>
         <button
           type="button"
+          className={`filter-chip ${filterType === 'medium' ? 'active' : ''}`}
+          onClick={() => setFilterType('medium')}
+        >
+          Medium Risk
+        </button>
+        <button
+          type="button"
           className={`filter-chip ${filterType === 'low' ? 'active' : ''}`}
           onClick={() => setFilterType('low')}
         >
@@ -249,13 +239,20 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
       <div className="history-cards-container">
         {filteredItems.length === 0 ? (
           <div className="empty-history-card card">
-            <Shield size={32} className="text-muted" />
-            <h3>No past analyses found</h3>
-            <p>Scans you run in Email Safety, URL Safety, or Privacy Policy will appear here.</p>
+            <Shield size={36} className="text-muted mb-2" />
+            <h3>No matching analyses found</h3>
+            <p>
+              {searchQuery
+                ? `No scans matched "${searchQuery}". Try a different keyword.`
+                : 'Scans you perform in Email Safety, URL Safety, or Privacy Policy will appear here automatically.'}
+            </p>
           </div>
         ) : (
           filteredItems.map((item) => {
-            const Icon = item.icon;
+            const Icon =
+              item.scan_type === 'email' ? Mail : item.scan_type === 'url' ? Link2 : FileText;
+            const iconColor = item.scan_type === 'policy' ? 'amber' : 'blue';
+
             return (
               <div
                 key={item.id}
@@ -266,7 +263,7 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
                 tabIndex={0}
               >
                 <div className="history-card-left">
-                  <div className={`history-icon-box ${item.iconColor}`}>
+                  <div className={`history-icon-box ${iconColor}`}>
                     <Icon size={18} />
                   </div>
                   <div className="history-card-details">
@@ -276,7 +273,7 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
                 </div>
 
                 <div className="history-card-right">
-                  <span className={`risk-badge ${item.badgeClass}`}>
+                  <span className={`risk-badge ${item.badgeClass || (item.risk_level === 'High' ? 'risk-badge-high' : item.risk_level === 'Medium' ? 'risk-badge-medium' : 'risk-badge-low')}`}>
                     {item.risk_level} Risk {typeof item.risk_score === 'number' ? `(${item.risk_score}/100)` : ''}
                   </span>
                   <ChevronRight size={18} className="history-item-chevron text-muted" />
@@ -286,6 +283,49 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
           })
         )}
       </div>
+
+      {/* Clear All Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="history-modal-backdrop" onClick={() => setShowClearConfirm(false)}>
+          <div className="history-modal-card card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-left">
+                <AlertTriangle size={24} className="text-amber" />
+                <h3 className="modal-title">Clear All History?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowClearConfirm(false)}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>
+                Are you sure you want to permanently delete all {historyList.length} past scan records from your audit trail? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowClearConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary bg-red"
+                onClick={handleClearAll}
+              >
+                <Trash2 size={16} /> Yes, Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Item Details Modal / Slide-out */}
       {selectedItem && (
@@ -299,7 +339,7 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
           >
             <div className="modal-header">
               <div className="modal-header-left">
-                <span className={`risk-badge ${selectedItem.badgeClass}`}>
+                <span className={`risk-badge ${selectedItem.badgeClass || (selectedItem.risk_level === 'High' ? 'risk-badge-high' : selectedItem.risk_level === 'Medium' ? 'risk-badge-medium' : 'risk-badge-low')}`}>
                   {selectedItem.risk_level} Risk ({selectedItem.risk_score}/100)
                 </span>
                 <h3 className="modal-title">{selectedItem.title}</h3>
@@ -340,23 +380,86 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan }) => {
                   </div>
                 </div>
               )}
+
+              {selectedItem.exposed_pii && selectedItem.exposed_pii.length > 0 && (
+                <div className="modal-section">
+                  <label className="modal-label">Exposed Sensitive Personal Data (PII)</label>
+                  <div className="modal-threats-tags">
+                    {selectedItem.exposed_pii.map((p, idx) => (
+                      <span key={idx} className="threat-tag-pill danger">
+                        {typeof p === 'object' ? `${p.type}: ${p.value}` : p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedItem.recommendations && selectedItem.recommendations.length > 0 && (
+                <div className="modal-section">
+                  <label className="modal-label">Actionable Recommendations</label>
+                  <ul className="modal-recommendations-list">
+                    {selectedItem.recommendations.map((rec, idx) => (
+                      <li key={idx}>
+                        <CheckCircle2 size={14} className="text-blue" />
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-ghost text-red"
-                onClick={(e) => handleDelete(selectedItem.id, e)}
-              >
-                <Trash2 size={16} /> Delete Record
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setSelectedItem(null)}
-              >
-                Close
-              </button>
+              <div className="modal-footer-left">
+                <button
+                  type="button"
+                  className="btn btn-ghost text-red"
+                  onClick={(e) => handleDelete(selectedItem.id, e)}
+                  title="Delete record from audit trail"
+                >
+                  <Trash2 size={16} /> Delete
+                </button>
+              </div>
+
+              <div className="modal-footer-right">
+                {onNavigateToLetters && (selectedItem.risk_level === 'High' || selectedItem.scan_type === 'policy') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary action-sm"
+                    onClick={() => {
+                      const item = selectedItem;
+                      setSelectedItem(null);
+                      handleDraftNotice(item);
+                    }}
+                    title="Draft statutory data erasure notice"
+                  >
+                    <FileCode size={15} /> Draft Legal Notice
+                  </button>
+                )}
+
+                {onReopenScan && (
+                  <button
+                    type="button"
+                    className="btn btn-primary action-sm"
+                    onClick={() => {
+                      const item = selectedItem;
+                      setSelectedItem(null);
+                      handleReopenInScanner(item);
+                    }}
+                    title="Load this scan in its specialized scanner"
+                  >
+                    <RotateCcw size={15} /> Re-open in Scanner
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-ghost action-sm"
+                  onClick={() => setSelectedItem(null)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -20,7 +20,7 @@ class GeminiService:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=self.api_key)
-                for model_name in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-1.5-flash"]:
+                for model_name in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]:
                     try:
                         self._client = genai.GenerativeModel(model_name)
                         logger.info(f"Gemini AI client successfully initialized with {model_name}.")

@@ -41,6 +41,12 @@ apiClient.interceptors.response.use(
       error.friendlyMessage = `Cannot connect to DataRaksha backend at ${API_BASE_URL}. Please ensure the FastAPI server is running on port 8000.`;
     }
     if (error.response && error.response.status === 401) {
+      const requestUrl = error.config?.url || '';
+      // Do not log out or kick user to login screen for optional history or health checks
+      if (requestUrl.includes('/history') || requestUrl.includes('/health')) {
+        return Promise.reject(error);
+      }
+
       const token = localStorage.getItem('dataraksha_auth_token');
       if (token && !token.startsWith('demo_jwt_token')) {
         localStorage.removeItem('dataraksha_auth_token');

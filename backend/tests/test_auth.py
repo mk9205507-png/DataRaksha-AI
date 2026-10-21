@@ -206,8 +206,10 @@ def test_verify_supabase_token_signature_verification(monkeypatch):
 # 5. User Registration & Login Validation Tests
 # ------------------------------------------------------------------------------
 
-def test_register_user_success():
+def test_register_user_success(monkeypatch):
     """Verify successful user registration with valid details."""
+    from app.services.supabase_service import supabase_service
+    monkeypatch.setattr(supabase_service, "_client", None)
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -263,8 +265,10 @@ def test_register_user_password_missing_numbers():
     assert response.status_code == 422
 
 
-def test_login_user_success():
+def test_login_user_success(monkeypatch):
     """Verify successful login returns valid token."""
+    from app.services.supabase_service import supabase_service
+    monkeypatch.setattr(supabase_service, "_client", None)
     response = client.post(
         "/api/v1/auth/login",
         json={

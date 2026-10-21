@@ -12,6 +12,7 @@ import {
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
+import { historyService } from '../services/historyService';
 
 const EXAMPLE_URLS = [
   { label: 'https://google.com', tag: 'Safe' },
@@ -21,12 +22,21 @@ const EXAMPLE_URLS = [
   { label: 'http://192.168.1.100/secure-update-patch.exe', tag: 'Raw IP' },
 ];
 
-export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
+export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData }) => {
   const [urlInput, setUrlInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.url) {
+      const url = initialData.preview || initialData.url;
+      setUrlInput(url);
+      runUrlScan(url);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -52,6 +62,12 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     try {
       const data = await scanService.scanLink(trimmed);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'url',
+        preview: trimmed,
+        result: data,
+        target_company: trimmed,
+      });
     } catch (err) {
       setAlert({
         type: 'error',

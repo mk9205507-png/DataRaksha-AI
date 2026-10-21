@@ -48,15 +48,26 @@ function AppContent() {
   const [authNoticeMessage, setAuthNoticeMessage] = useState('');
   const [globalAlert, setGlobalAlert] = useState(null);
   const [prefilledLetterData, setPrefilledLetterData] = useState(null);
+  const [scannerInitialData, setScannerInitialData] = useState(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
 
+  const isUserAuthenticated = () => {
+    if (isAuthenticated) return true;
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('dataraksha_auth_token');
+      const userStr = localStorage.getItem('dataraksha_user');
+      return Boolean(token || userStr);
+    }
+    return false;
+  };
+
   // Central Navigation & History Synchronization
   const navigateToTab = (targetTab, { replace = false, notice = '' } = {}) => {
     // If target route is protected and user is not authenticated, redirect to Login/Register
-    if (PROTECTED_TABS.includes(targetTab) && !isAuthenticated) {
+    if (PROTECTED_TABS.includes(targetTab) && !isUserAuthenticated()) {
       setRedirectTabAfterAuth(targetTab);
       setAuthNoticeMessage(notice || 'Please sign in to continue.');
       setPreviousTab(activeTab);
@@ -111,11 +122,11 @@ function AppContent() {
     };
   }, [activeTab]);
 
-  // Central Route Guard: Re-evaluate when activeTab or isAuthenticated changes
+  // Central Route Guard: Re-evaluate when activeTab or authentication changes
   useEffect(() => {
     if (isLoading) return;
 
-    if (PROTECTED_TABS.includes(activeTab) && !isAuthenticated) {
+    if (PROTECTED_TABS.includes(activeTab) && !isUserAuthenticated()) {
       setRedirectTabAfterAuth(activeTab);
       setAuthNoticeMessage('Please sign in to continue.');
       setActiveTab('auth');
@@ -129,7 +140,7 @@ function AppContent() {
       const tabFromHash = getTabFromHash();
       const targetTab = e.state?.tab || tabFromHash || 'home';
 
-      if (PROTECTED_TABS.includes(targetTab) && !isAuthenticated) {
+      if (PROTECTED_TABS.includes(targetTab) && !isUserAuthenticated()) {
         setRedirectTabAfterAuth(targetTab);
         setAuthNoticeMessage('Please sign in to continue.');
         setActiveTab('auth');
@@ -160,16 +171,28 @@ function AppContent() {
       setGlobalAlert((current) => (current?.type === 'success' ? null : current));
     }, 3500);
 
-    if (targetTab === 'admin' && !isAdmin) {
-      navigateToTab('dashboard', { replace: true });
-    } else {
-      navigateToTab(targetTab, { replace: true });
-    }
+    const finalTab = targetTab === 'admin' && !isAdmin ? 'dashboard' : targetTab;
+    setPreviousTab('auth');
+    setActiveTab(finalTab);
+    const targetHash = finalTab === 'home' ? '#home' : `#${finalTab}`;
+    window.history.pushState({ tab: finalTab }, '', targetHash);
   };
 
   const handleNavigateToLetters = (data) => {
     setPrefilledLetterData(data);
     navigateToTab('letters');
+  };
+
+  const handleReopenScan = (scan) => {
+    if (!scan) return;
+    setScannerInitialData(scan);
+    const target =
+      scan.scan_type === 'message' || scan.scan_type === 'email' || scan.type === 'email'
+        ? 'email'
+        : scan.scan_type === 'link' || scan.scan_type === 'url' || scan.type === 'url'
+        ? 'url'
+        : 'policy';
+    navigateToTab(target);
   };
 
   // Initial loading splash screen
@@ -224,7 +247,7 @@ function AppContent() {
   // 3. Inner Application Views (Screens 2 - 6 with Left Sidebar)
   const renderInnerView = () => {
     // Fail-safe protection: block protected component rendering if unauthenticated
-    if (PROTECTED_TABS.includes(activeTab) && !isAuthenticated) {
+    if (PROTECTED_TABS.includes(activeTab) && !isUserAuthenticated()) {
       return (
         <AuthPage
           onAuthSuccess={handleAuthSuccess}
@@ -237,25 +260,28 @@ function AppContent() {
       case 'email':
         return (
           <EmailSafetyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab(isUserAuthenticated() ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
             onOpenAuth={(targetTab, msg) => handleOpenAuth(targetTab, msg)}
+            initialData={scannerInitialData}
           />
         );
 
       case 'url':
         return (
           <UrlSafetyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab(isUserAuthenticated() ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
+            initialData={scannerInitialData}
           />
         );
 
       case 'policy':
         return (
           <PrivacyPolicyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab(isUserAuthenticated() ? 'dashboard' : 'home')}
             onNavigateToLetters={handleNavigateToLetters}
+            initialData={scannerInitialData}
           />
         );
 
@@ -263,7 +289,7 @@ function AppContent() {
         return (
           <DashboardPage
             onNavigate={(tab) => navigateToTab(tab)}
-            onSelectActivity={(act) => navigateToTab(act.type)}
+            onSelectActivity={(act) => handleReopenScan(act)}
           />
         );
 
@@ -271,7 +297,8 @@ function AppContent() {
         return (
           <AnalysisHistoryPage
             onNavigateBack={() => navigateToTab('dashboard')}
-            onReopenScan={(scan) => navigateToTab(scan.scan_type)}
+            onReopenScan={handleReopenScan}
+            onNavigateToLetters={handleNavigateToLetters}
           />
         );
 

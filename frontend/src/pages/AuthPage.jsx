@@ -39,56 +39,7 @@ export const AuthPage = ({
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginErrors, setLoginErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
-  // Quick fill helper for developers / reviewers
-  const handleQuickFill = (name, email) => {
-    setLoginEmail(email);
-    setLoginPassword('SecureP@ss2026');
-    setLoginErrors({});
-    setAlert(null);
-  };
-
-  const handleQuickEmailSignIn = async (customEmail = '') => {
-    const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
-    if (!rawEmail || !rawEmail.includes('@')) {
-      setAlert({
-        type: 'warning',
-        message: 'Please enter a valid email address (e.g. iddhik1208@gmail.com) to continue.',
-      });
-      return;
-    }
-
-    setIsLoggingIn(true);
-    setAlert(null);
-
-    try {
-      let res;
-      if (loginWithGoogle) {
-        res = await loginWithGoogle({ email: rawEmail, name: rawEmail.split('@')[0] });
-      } else {
-        res = await login({ email: rawEmail, password: 'DataRaksha@2026' });
-      }
-
-      setAlert({
-        type: 'success',
-        message: `Welcome, ${rawEmail}! Loading your encrypted security profile...`,
-      });
-
-      setTimeout(() => {
-        if (onAuthSuccess) {
-          onAuthSuccess(res.user);
-        }
-      }, 400);
-    } catch (err) {
-      setAlert({
-        type: 'error',
-        message: err.message || 'Could not complete sign in. Please try again.',
-      });
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Register Form State
@@ -191,25 +142,35 @@ export const AuthPage = ({
         password: loginPassword || 'DataRaksha@2026',
       });
 
-      // Display green success notification
+      setLoginSuccess(true);
       setAlert({
         type: 'success',
-        message: '✓ Sign in successful! Welcome to DataRaksha AI.',
+        message: 'Authentication successful! Welcome to your security shield.',
+        action: (
+          <button
+            type="button"
+            className="alert-action-btn"
+            id="alert-go-to-dashboard-btn"
+            onClick={() => {
+              if (onAuthSuccess) onAuthSuccess(result.user);
+            }}
+          >
+            Go to Dashboard &rarr;
+          </button>
+        ),
       });
-      setIsRedirecting(true);
 
-      // Keep success message visible on Sign In page for 2.2s (~2-3 seconds) before navigating to Dashboard
+      // Keep success message visible and auto-redirect to dashboard
       setTimeout(() => {
         if (onAuthSuccess) {
           onAuthSuccess(result.user);
         }
-      }, 2200);
+      }, 700);
     } catch (err) {
       setAlert({
         type: 'error',
         message: '✗ Sign in failed. Please check your email and password.',
       });
-      setIsRedirecting(false);
     } finally {
       setIsLoggingIn(false);
     }
@@ -479,14 +440,16 @@ export const AuthPage = ({
             {/* Submit Button */}
             <button
               id="login-submit-btn"
-              type="submit"
-              className={`btn btn-primary auth-submit-btn w-full ${isRedirecting ? 'btn-redirecting' : ''}`}
-              disabled={isLoggingIn || isRedirecting}
+              type={loginSuccess ? 'button' : 'submit'}
+              className={`btn btn-primary auth-submit-btn w-full ${loginSuccess ? 'auth-btn-success' : ''}`}
+              onClick={loginSuccess ? () => onAuthSuccess && onAuthSuccess() : undefined}
+              disabled={isLoggingIn}
             >
-              {isRedirecting ? (
+              {loginSuccess ? (
                 <>
-                  <CheckCircle2 size={16} />
-                  <span>Redirecting to Dashboard...</span>
+                  <CheckCircle2 size={18} />
+                  <span>Go to Dashboard</span>
+                  <ArrowRight size={16} />
                 </>
               ) : isLoggingIn ? (
                 <>
@@ -498,27 +461,6 @@ export const AuthPage = ({
                   <ArrowRight size={16} />
                 </>
               )}
-            </button>
-
-            {/* Instant Sign In for Any Email */}
-            <div style={{ margin: '0.85rem 0 0.65rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                or check email directly
-              </span>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
-            </div>
-
-            <button
-              type="button"
-              id="instant-email-check-btn"
-              className="btn btn-secondary w-full"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.65rem 1rem' }}
-              onClick={() => handleQuickEmailSignIn(loginEmail || 'iddhik1208@gmail.com')}
-              disabled={isLoggingIn}
-            >
-              <Mail size={16} className="text-blue" />
-              <span>Instant Sign In & Check Email Inbox</span>
             </button>
           </form>
         )}
@@ -754,57 +696,6 @@ export const AuthPage = ({
             </button>
           </form>
         )}
-        {/* Quick Demo Pre-fill Pills */}
-        <div className="auth-quick-fill-section">
-          <span className="quick-fill-label">
-            <Sparkles size={13} /> Quick Demo Profiles:
-          </span>
-          <div className="quick-fill-chips">
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => {
-                setAuthMode('login');
-                handleQuickFill('Kalyani', 'kalyani@dataraksha.ai');
-              }}
-            >
-              Sign In as Kalyani
-            </button>
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => {
-                setAuthMode('login');
-                handleQuickFill('Admin', 'admin@dataraksha.ai');
-              }}
-            >
-              Sign In as Admin
-            </button>
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => handleQuickEmailSignIn('iddhik1208@gmail.com')}
-            >
-              Sign In as iddhik1208@gmail.com
-            </button>
-            {savedName && (
-              <button
-                type="button"
-                className="quick-fill-chip reset-chip"
-                onClick={() => {
-                  setLoginEmail('');
-                  setLoginPassword('');
-                  localStorage.removeItem('dataraksha_person_name');
-                  localStorage.removeItem('dataraksha_saved_email');
-                  setLoginErrors({});
-                }}
-                title="Clear saved name"
-              >
-                <RotateCcw size={12} /> Clear Saved
-              </button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -10,6 +10,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { historyService } from '../services/historyService';
 
 export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
   const { user, isAuthenticated } = useAuth();
@@ -20,22 +21,52 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
     (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
     (user?.email ? user.email.split('@')[0] : 'User');
 
-  // Baseline stats matching reference design with Digital Safety Score
+  const [historyList, setHistoryList] = useState(() => historyService.getStoredScans());
+
+  useEffect(() => {
+    setHistoryList(historyService.getStoredScans());
+
+    const handleUpdate = (e) => {
+      if (Array.isArray(e.detail?.allRecords)) {
+        setHistoryList(e.detail.allRecords);
+      } else {
+        setHistoryList(historyService.getStoredScans());
+      }
+    };
+
+    window.addEventListener('dataraksha:history_updated', handleUpdate);
+    return () => window.removeEventListener('dataraksha:history_updated', handleUpdate);
+  }, []);
+
+  const totalScans = historyList.length;
+  const highRiskCount = historyList.filter((item) => item.risk_level === 'High').length;
+  const lowRiskCount = historyList.filter((item) => item.risk_level === 'Low').length;
+
+  let calculatedScore = 84;
+  if (totalScans > 0) {
+    const penalty = highRiskCount * 14 + (totalScans - highRiskCount - lowRiskCount) * 5;
+    calculatedScore = Math.max(32, Math.min(98, 100 - penalty));
+  }
+
+  const scoreLevel =
+    calculatedScore >= 80 ? 'High Protection Level' : calculatedScore >= 60 ? 'Moderate Protection' : 'Attention Advised';
+
+  // Stats matching reference design with Digital Safety Score
   const stats = [
     {
       id: 'score',
       label: 'Digital Safety Score',
-      value: '84/100',
-      subtext: 'High Protection Level',
+      value: `${calculatedScore}/100`,
+      subtext: scoreLevel,
       icon: ShieldCheck,
-      colorClass: 'green',
-      barColor: '#10b981',
-      progressPercent: 84,
+      colorClass: calculatedScore >= 70 ? 'green' : calculatedScore >= 50 ? 'amber' : 'red',
+      barColor: calculatedScore >= 70 ? '#10b981' : calculatedScore >= 50 ? '#f59e0b' : '#ef4444',
+      progressPercent: calculatedScore,
     },
     {
       id: 'total',
       label: 'Total Analyses',
-      value: 12,
+      value: totalScans,
       subtext: 'across all engines',
       icon: Layers,
       colorClass: 'blue',
@@ -45,79 +76,44 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
     {
       id: 'high-risk',
       label: 'High Risk',
-      value: 2,
+      value: highRiskCount,
       subtext: 'threats intercepted',
       icon: ShieldAlert,
       colorClass: 'red',
       barColor: '#ef4444',
-      progressPercent: 17,
+      progressPercent: totalScans > 0 ? Math.round((highRiskCount / totalScans) * 100) : 0,
     },
     {
       id: 'low-risk',
       label: 'Low Risk',
-      value: 6,
+      value: lowRiskCount,
       subtext: 'verified safe items',
       icon: ShieldCheck,
       colorClass: 'green',
       barColor: '#10b981',
-      progressPercent: 50,
+      progressPercent: totalScans > 0 ? Math.round((lowRiskCount / totalScans) * 100) : 0,
     },
   ];
 
-  // Exact 4 activity items from Reference Screen 5
-  const recentActivities = [
-    {
-      id: 'act-1',
-      type: 'email',
-      title: 'Email Analysis',
-      subtitle: 'Suspicious link detected',
-      risk: 'High',
-      badgeClass: 'risk-badge-high',
-      icon: Mail,
-      iconColorClass: 'red',
-      date: '16 Oct 2026, 2:30 PM',
-      preview:
-        'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately...',
-    },
-    {
-      id: 'act-2',
-      type: 'url',
-      title: 'URL Analysis',
-      subtitle: 'Safe website',
-      risk: 'Low',
-      badgeClass: 'risk-badge-low',
-      icon: Link2,
-      iconColorClass: 'green',
-      date: '16 Oct 2026, 11:30 AM',
-      preview: 'https://google.com',
-    },
-    {
-      id: 'act-3',
-      type: 'policy',
-      title: 'Privacy Policy',
-      subtitle: 'Data sharing details found',
-      risk: 'Medium',
-      badgeClass: 'risk-badge-medium',
-      icon: FileText,
-      iconColorClass: 'amber',
-      date: '15 Oct 2026, 4:15 PM',
-      preview:
-        'We collect your exact GPS location, browser history, microphone telemetry, and share with data brokers and third-party syndicates without explicit prior consent...',
-    },
-    {
-      id: 'act-4',
-      type: 'email',
-      title: 'Email Analysis',
-      subtitle: 'Phishing attempt detected',
-      risk: 'High',
-      badgeClass: 'risk-badge-high',
-      icon: Mail,
-      iconColorClass: 'red',
-      date: '14 Oct 2026, 1:10 PM',
-      preview:
-        'CONGRATULATIONS! Your mobile number won 1st prize of $1,000,000 in the International Mobile Rewards Draw. Claim immediately...',
-    },
-  ];
+  const recentActivities = historyList.slice(0, 4).map((item) => ({
+    id: item.id,
+    type: item.scan_type,
+    title: item.title,
+    subtitle: item.summary || 'Security assessment completed.',
+    risk: item.risk_level,
+    badgeClass:
+      item.badgeClass ||
+      (item.risk_level === 'High'
+        ? 'risk-badge-high'
+        : item.risk_level === 'Medium'
+        ? 'risk-badge-medium'
+        : 'risk-badge-low'),
+    icon: item.scan_type === 'email' ? Mail : item.scan_type === 'url' ? Link2 : FileText,
+    iconColorClass: item.risk_level === 'High' ? 'red' : item.risk_level === 'Medium' ? 'amber' : 'green',
+    date: item.timestamp,
+    preview: item.preview,
+    target_company: item.target_company,
+  }));
 
   const handleItemClick = (activity) => {
     if (onSelectActivity) {

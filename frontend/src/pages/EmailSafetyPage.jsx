@@ -17,6 +17,7 @@ import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
 import { gmailService } from '../services/gmailService';
+import { historyService } from '../services/historyService';
 import { useAuth } from '../context/AuthContext';
 
 // Scenario presets matching real threat cases
@@ -59,7 +60,7 @@ const EMAIL_PRESETS = [
   },
 ];
 
-export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAuth }) => {
+export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAuth, initialData }) => {
   const { isAuthenticated, user, loginWithGoogle } = useAuth();
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [emailContent, setEmailContent] = useState('');
@@ -75,6 +76,17 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
   const [inboxEmails, setInboxEmails] = useState([]);
   const [directEmailInput, setDirectEmailInput] = useState('');
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.content) {
+      const text = initialData.preview || initialData.content;
+      setEmailContent(text);
+      if (initialData.sender) setSenderEmail(initialData.sender);
+      if (initialData.subject) setEmailSubject(initialData.subject);
+      runEmailScan(text, initialData.sender || '', initialData.subject || '');
+    }
+  }, [initialData]);
 
   // Smooth scroll down to threat risk card whenever result is populated
   useEffect(() => {
@@ -217,17 +229,35 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
           subject: subject || emailSubject,
         });
         setResult(data);
+        historyService.saveScanRecord({
+          scan_type: 'email',
+          preview: contentToScan,
+          result: data,
+          target_company: sender || 'Gmail Inbox',
+        });
         return;
       }
 
       // For sample threat scenarios or pasted content, use core message scanner (with client-side fallback)
       const data = await scanService.scanMessage(contentToScan);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'email',
+        preview: contentToScan,
+        result: data,
+        target_company: sender || 'Email Communication',
+      });
     } catch (err) {
       console.warn('Dedicated email scan failed, falling back to general message scanner:', err);
       try {
         const fallbackData = await scanService.scanMessage(contentToScan);
         setResult(fallbackData);
+        historyService.saveScanRecord({
+          scan_type: 'email',
+          preview: contentToScan,
+          result: fallbackData,
+          target_company: sender || 'Email Communication',
+        });
       } catch (fallbackErr) {
         setAlert({
           type: 'error',

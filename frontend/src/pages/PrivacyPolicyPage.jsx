@@ -13,6 +13,7 @@ import {
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
+import { historyService } from '../services/historyService';
 
 const POLICY_PRESETS = [
   {
@@ -38,7 +39,7 @@ const POLICY_PRESETS = [
   },
 ];
 
-export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
+export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initialData }) => {
   const [policyText, setPolicyText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -46,6 +47,15 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [alert, setAlert] = useState(null);
   const textareaRef = useRef(null);
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.policy_text) {
+      const text = initialData.preview || initialData.policy_text;
+      setPolicyText(text);
+      runPolicyScan(text);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -105,6 +115,12 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     try {
       const data = await scanService.scanPolicy(trimmed);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'policy',
+        preview: trimmed,
+        result: data,
+        target_company: 'Privacy Policy Document',
+      });
     } catch (err) {
       const errMsg =
         err.message ||
