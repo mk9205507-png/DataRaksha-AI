@@ -19,6 +19,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { scanService } from '../services/scanService';
+import { historyService } from '../services/historyService';
 import { useAuth } from '../context/AuthContext';
 
 // Scenario quick-test presets for each specialized security module
@@ -292,8 +293,17 @@ export const Dashboard = ({ onNavigateToLetters }) => {
           throw new Error('Invalid analysis module selected.');
       }
 
-      setResult({
+      const reportData = {
         ...scanResponse,
+        target_company: detectedCompany,
+      };
+
+      setResult(reportData);
+
+      historyService.saveScanRecord({
+        scan_type: activeModule,
+        preview: textToScan,
+        result: reportData,
         target_company: detectedCompany,
       });
 

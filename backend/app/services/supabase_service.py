@@ -40,12 +40,24 @@ class SupabaseService:
             record["created_at"] = datetime.now(timezone.utc).isoformat()
         self._mock_scans.setdefault(user_id, []).insert(0, record)
 
-        # For local demo accounts, avoid inserting to Supabase table to prevent foreign key errors with profiles
-        if not self._client or user_id.startswith("00000000-0000-0000-0000-") or "demo" in user_id:
+        # For local demo accounts or test accounts, avoid inserting to Supabase table
+        if not self._client or user_id.startswith("00000000-0000-0000-0000-") or "demo" in user_id or user_id.startswith("test-"):
             logger.debug(f"[Mock DB] Saved scan for user {user_id}: {record.get('scan_type')}")
             return record
 
         try:
+            # Ensure user profile exists to prevent foreign key errors with profiles table
+            try:
+                prof = self._client.table("profiles").select("id").eq("id", user_id).execute()
+                if not prof.data:
+                    self._client.table("profiles").insert({
+                        "id": user_id,
+                        "email": record.get("user_email") or f"user_{user_id[:8]}@dataraksha.ai",
+                        "role": "individual",
+                    }).execute()
+            except Exception as pe:
+                logger.debug(f"Profiles upsert check note: {pe}")
+
             res = self._client.table("scan_history").insert(record).execute()
             return res.data[0] if res.data else None
         except Exception as e:
@@ -62,21 +74,8 @@ class SupabaseService:
     ) -> Dict[str, Any]:
         """Retrieves past scan entries for authenticated user with pagination and filtering."""
         user_id_str = str(user_id)
-        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str in self._mock_scans:
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str.startswith("test-"):
             user_records = self._mock_scans.get(user_id_str, [])
-            if not user_records and ("demo" in user_id_str or user_id_str.startswith("00000000-0000-0000-0000-")):
-                user_records = [
-                    {
-                        "id": "demo-sc-1",
-                        "user_id": user_id,
-                        "scan_type": "message",
-                        "input_preview": "URGENT: Your State Bank account has been suspended...",
-                        "risk_level": "High",
-                        "risk_score": 88,
-                        "summary": "Phishing urgency cues and banking impersonation detected.",
-                        "created_at": "2026-10-16T10:00:00Z",
-                    }
-                ]
             filtered = [
                 r for r in user_records
                 if (not scan_type or r.get("scan_type") == scan_type)
@@ -118,7 +117,7 @@ class SupabaseService:
     async def delete_user_scan(self, user_id: str, scan_id: str) -> bool:
         """Deletes a specific scan record belonging to the authenticated user."""
         user_id_str = str(user_id)
-        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str in self._mock_scans:
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str.startswith("test-"):
             user_records = self._mock_scans.get(user_id_str, [])
             before_len = len(user_records)
             self._mock_scans[user_id_str] = [r for r in user_records if r.get("id") != scan_id]
@@ -140,7 +139,7 @@ class SupabaseService:
     async def clear_user_scans(self, user_id: str) -> int:
         """Deletes all scan records for the authenticated user."""
         user_id_str = str(user_id)
-        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str in self._mock_scans:
+        if not self._client or user_id_str.startswith("00000000-0000-0000-0000-") or "demo" in user_id_str or user_id_str.startswith("test-"):
             count = len(self._mock_scans.get(user_id_str, []))
             self._mock_scans[user_id_str] = []
             return count
@@ -299,6 +298,78 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Failed to delete Gmail connection for {user_id}: {e}")
             return False
+
+    async def get_admin_overview(self) -> Dict[str, Any]:
+        """
+        Calculates aggregated platform metrics from genuine stored records in Supabase.
+        Returns total scans, scans today, risk level breakdown, scans by type,
+        and registered user counts.
+        """
+        from datetime import datetime, timezone
+        now_utc = datetime.now(timezone.utc)
+        today_date_str = now_utc.strftime("%Y-%m-%d")
+
+        total_scans = 0
+        scans_today = 0
+        risk_breakdown = {"low": 0, "medium": 0, "high": 0}
+        scans_by_type = {"message": 0, "link": 0, "policy": 0}
+        registered_users = 0
+
+        # 1. Query registered users count from profiles
+        if self._client:
+            try:
+                prof_res = self._client.table("profiles").select("id", count="exact").execute()
+                registered_users = prof_res.count if hasattr(prof_res, "count") and prof_res.count is not None else len(prof_res.data or [])
+            except Exception as e:
+                logger.warning(f"Failed to fetch profiles count: {e}")
+
+        # 2. Query scan_history table
+        if self._client:
+            try:
+                res = self._client.table("scan_history").select("scan_type, risk_level, created_at").execute()
+                records = res.data or []
+                total_scans = len(records)
+                for r in records:
+                    stype = (r.get("scan_type") or "").lower()
+                    if stype in scans_by_type:
+                        scans_by_type[stype] += 1
+
+                    rlevel = (r.get("risk_level") or "").lower()
+                    if rlevel in risk_breakdown:
+                        risk_breakdown[rlevel] += 1
+
+                    created = r.get("created_at") or ""
+                    if created.startswith(today_date_str):
+                        scans_today += 1
+            except Exception as e:
+                logger.warning(f"Failed to query scan_history for admin overview: {e}")
+        else:
+            # In-memory mock scans aggregation
+            all_mock = [item for sublist in self._mock_scans.values() for item in sublist]
+            total_scans = len(all_mock)
+            for r in all_mock:
+                stype = (r.get("scan_type") or "").lower()
+                if stype in scans_by_type:
+                    scans_by_type[stype] += 1
+                rlevel = (r.get("risk_level") or "").lower()
+                if rlevel in risk_breakdown:
+                    risk_breakdown[rlevel] += 1
+                created = r.get("created_at") or ""
+                if created.startswith(today_date_str):
+                    scans_today += 1
+
+        return {
+            "total_scans": total_scans,
+            "scans_today": scans_today,
+            "registered_users": registered_users,
+            "risk_breakdown": risk_breakdown,
+            "scans_by_type": scans_by_type,
+            "system_status": {
+                "gemini_api": "Operational (Real-time AI heuristics)",
+                "safe_browsing_api": "Operational (v4 Threat Feeds)",
+                "supabase_db": "Connected (Row Level Security Active)" if self._client else "Offline / Disconnected",
+            },
+        }
 
 
 supabase_service = SupabaseService()

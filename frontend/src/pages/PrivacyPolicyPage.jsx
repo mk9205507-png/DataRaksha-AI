@@ -13,6 +13,8 @@ import {
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
+import { historyService } from '../services/historyService';
+import { useAuth } from '../context/AuthContext';
 
 const POLICY_PRESETS = [
   {
@@ -38,7 +40,8 @@ const POLICY_PRESETS = [
   },
 ];
 
-export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
+export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initialData }) => {
+  const { user, isOnline } = useAuth();
   const [policyText, setPolicyText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -46,6 +49,15 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
   const [alert, setAlert] = useState(null);
   const textareaRef = useRef(null);
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.policy_text) {
+      const text = initialData.preview || initialData.policy_text;
+      setPolicyText(text);
+      runPolicyScan(text);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -83,6 +95,14 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
       return;
     }
 
+    if (!navigator.onLine || isOnline === false) {
+      setAlert({
+        type: 'warning',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     const isUrl = checkIfUrl(trimmed);
 
     // Text terms need meaningful length, whereas a URL like example.com can be short
@@ -105,6 +125,13 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
     try {
       const data = await scanService.scanPolicy(trimmed);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'policy',
+        preview: trimmed,
+        result: data,
+        target_company: 'Privacy Policy Document',
+        userId: user?.id,
+      });
     } catch (err) {
       const errMsg =
         err.message ||
@@ -114,15 +141,26 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
       setAlert({
         type: 'error',
         message: errMsg,
-        action: isUrl ? (
-          <button
-            type="button"
-            className="btn btn-secondary action-sm alert-paste-manual-btn"
-            onClick={handleSwitchToManualPaste}
-          >
-            <ClipboardPaste size={14} /> Paste Policy Text Manually
-          </button>
-        ) : null,
+        action: (
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-secondary action-sm"
+              onClick={() => runPolicyScan(trimmed)}
+            >
+              Retry
+            </button>
+            {isUrl && (
+              <button
+                type="button"
+                className="btn btn-secondary action-sm alert-paste-manual-btn"
+                onClick={handleSwitchToManualPaste}
+              >
+                <ClipboardPaste size={14} /> Paste Manually
+              </button>
+            )}
+          </div>
+        ),
       });
     } finally {
       setIsLoading(false);
@@ -247,12 +285,17 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters }) => {
                 type="button"
                 className="btn btn-primary policy-submit-btn"
                 onClick={handleScanPolicy}
-                disabled={isLoading || !policyText.trim()}
+                disabled={isLoading || !policyText.trim() || !isOnline}
+                title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Policy'}
               >
                 {isLoading ? (
                   <>
                     <div className="spinner sm" />
                     <span>{isCurrentInputUrl ? 'Fetching & Analysing...' : 'Analysing Policy...'}</span>
+                  </>
+                ) : !isOnline ? (
+                  <>
+                    <Sparkles size={16} /> Offline
                   </>
                 ) : (
                   <>

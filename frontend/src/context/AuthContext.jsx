@@ -1,28 +1,54 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { historyService } from '../services/historyService';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem('dataraksha_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [session, setSession] = useState(null);
-  const [token, setToken] = useState(null);
-  const [role, setRole] = useState('individual');
+  const [token, setToken] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('dataraksha_auth_token') || null;
+  });
+  const [role, setRole] = useState(() => {
+    if (typeof window === 'undefined') return 'individual';
+    try {
+      const saved = localStorage.getItem('dataraksha_user');
+      return saved ? JSON.parse(saved)?.role || 'individual' : 'individual';
+    } catch {
+      return 'individual';
+    }
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
-  // Helper to extract or resolve user role
+  // Track browser network connectivity (Online / Offline)
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Helper to extract user display name
   const resolveUserDisplayName = (rawUser) => {
-    // 1. Explicit displayName on user object
-    if (rawUser?.displayName && typeof rawUser.displayName === 'string' && rawUser.displayName.trim()) {
-      return rawUser.displayName.trim();
-    }
-    // 2. Explicitly saved person name in localStorage
-    const savedPersonName = localStorage.getItem('dataraksha_person_name');
-    if (savedPersonName && typeof savedPersonName === 'string' && savedPersonName.trim()) {
-      return savedPersonName.trim();
-    }
-    // 3. Supabase metadata full_name
+    if (!rawUser) return '';
     const nameFromMeta = rawUser?.user_metadata?.full_name || rawUser?.user_metadata?.name;
     if (nameFromMeta && typeof nameFromMeta === 'string' && nameFromMeta.trim()) {
       return nameFromMeta.trim();
@@ -30,117 +56,103 @@ export const AuthProvider = ({ children }) => {
     if (rawUser?.full_name && typeof rawUser.full_name === 'string' && rawUser.full_name.trim()) {
       return rawUser.full_name.trim();
     }
-    if (rawUser?.name && typeof rawUser.name === 'string' && rawUser.name.trim()) {
-      return rawUser.name.trim();
+    if (rawUser?.displayName && typeof rawUser.displayName === 'string' && rawUser.displayName.trim()) {
+      return rawUser.displayName.trim();
     }
-    // 4. Default if user exists (never use email prefix like mk9205507 or user123)
-    return rawUser ? 'Kalyani' : '';
+    const savedPersonName = localStorage.getItem('dataraksha_person_name');
+    if (savedPersonName && typeof savedPersonName === 'string' && savedPersonName.trim()) {
+      return savedPersonName.trim();
+    }
+    if (rawUser?.email && typeof rawUser.email === 'string') {
+      const prefix = rawUser.email.split('@')[0];
+      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    return 'User';
   };
 
-  // Helper to extract or resolve user role
-  const resolveUserRole = (rawUser) => {
-    if (!rawUser) return 'individual';
-    const roleFromAppMeta = rawUser.app_metadata?.role;
-    const roleFromUserMeta = rawUser.user_metadata?.role;
-    if (roleFromAppMeta) return roleFromAppMeta;
-    if (roleFromUserMeta) return roleFromUserMeta;
+  // Helper to securely fetch user role from Supabase database profiles table
+  const fetchProfileRole = useCallback(async (userId) => {
+    if (!userId) return 'individual';
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
 
-    // Check email pattern (e.g., admin@... or contains admin)
-    const email = (rawUser.email || '').toLowerCase();
-    if (email.startsWith('admin@') || email.includes('admin')) {
-      return 'admin';
+      if (!error && data?.role && (data.role === 'admin' || data.role === 'individual')) {
+        return data.role;
+      }
+    } catch (e) {
+      console.warn('Could not query role from profiles table:', e);
     }
     return 'individual';
-  };
+  }, []);
 
-  // Sync token to localStorage and state
-  const syncAuthState = (currentSession, currentUser = null) => {
-    if (currentSession && currentSession.user) {
-      const activeUser = currentUser || currentSession.user;
-      const userRole = resolveUserRole(activeUser);
-      const displayName = resolveUserDisplayName(activeUser);
-      const enrichedUser = {
-        ...activeUser,
-        role: userRole,
-        displayName,
-      };
+  // Synchronize authentication state
+  const syncAuthState = useCallback(
+    async (currentSession, activeUserOverride = null) => {
+      // Purge any un-scoped legacy scan history so old test scans never bleed into user accounts
+      historyService.purgeLegacyUnscopedHistory();
 
-      setSession(currentSession);
-      setUser(enrichedUser);
-      setToken(currentSession.access_token);
-      setRole(userRole);
+      if (currentSession && currentSession.user) {
+        const rawUser = activeUserOverride || currentSession.user;
+        const dbRole = await fetchProfileRole(rawUser.id);
+        const resolvedRole =
+          rawUser.app_metadata?.role === 'admin' || dbRole === 'admin' ? 'admin' : 'individual';
+        const displayName = resolveUserDisplayName(rawUser);
 
-      localStorage.setItem('dataraksha_auth_token', currentSession.access_token);
-      localStorage.setItem('dataraksha_user', JSON.stringify(enrichedUser));
-    } else if (currentUser) {
-      const userRole = resolveUserRole(currentUser);
-      const displayName = resolveUserDisplayName(currentUser);
-      const enrichedUser = {
-        ...currentUser,
-        role: userRole,
-        displayName,
-      };
+        const enrichedUser = {
+          ...rawUser,
+          role: resolvedRole,
+          displayName,
+        };
 
-      setUser(enrichedUser);
-      setRole(userRole);
-      const fallbackToken = currentUser.token || localStorage.getItem('dataraksha_auth_token') || 'demo_jwt_token_active';
-      setToken(fallbackToken);
-      localStorage.setItem('dataraksha_auth_token', fallbackToken);
-      localStorage.setItem('dataraksha_user', JSON.stringify(enrichedUser));
-    } else {
-      setSession(null);
-      setUser(null);
-      setToken(null);
-      setRole('individual');
-      localStorage.removeItem('dataraksha_auth_token');
-      localStorage.removeItem('dataraksha_user');
-      localStorage.removeItem('dataraksha_person_name');
-      localStorage.removeItem('dataraksha_saved_email');
-    }
-  };
+        setSession(currentSession);
+        setUser(enrichedUser);
+        setToken(currentSession.access_token);
+        setRole(resolvedRole);
 
+        localStorage.setItem('dataraksha_auth_token', currentSession.access_token);
+        localStorage.setItem('dataraksha_user', JSON.stringify(enrichedUser));
+        if (displayName) {
+          localStorage.setItem('dataraksha_person_name', displayName);
+        }
+      } else {
+        setSession(null);
+        setUser(null);
+        setToken(null);
+        setRole('individual');
+        localStorage.removeItem('dataraksha_auth_token');
+        localStorage.removeItem('dataraksha_user');
+        localStorage.removeItem('dataraksha_person_name');
+        localStorage.removeItem('dataraksha_saved_email');
+        localStorage.removeItem('dataraksha_scan_history');
+        window.dispatchEvent(
+          new CustomEvent('dataraksha:history_updated', {
+            detail: { allRecords: [], userId: null },
+          })
+        );
+      }
+    },
+    [fetchProfileRole]
+  );
+
+  // Initialize session on startup
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
-        // 1. Check Supabase session
         const { data, error } = await supabase.auth.getSession();
         if (!error && data?.session) {
-          if (mounted) syncAuthState(data.session);
+          if (mounted) await syncAuthState(data.session);
         } else {
-          // 2. Check local persistence fallback (e.g. demo mode or offline development)
-          const storedUser = localStorage.getItem('dataraksha_user');
-          const storedToken = localStorage.getItem('dataraksha_auth_token');
-          if (storedUser && storedToken) {
-            try {
-              const parsedUser = JSON.parse(storedUser);
-              if (mounted) syncAuthState(null, parsedUser);
-            } catch {
-              localStorage.removeItem('dataraksha_user');
-              localStorage.removeItem('dataraksha_auth_token');
-              if (mounted) syncAuthState(null, null);
-            }
-          } else {
-            if (mounted) syncAuthState(null, null);
-          }
+          if (mounted) await syncAuthState(null);
         }
       } catch (err) {
-        console.warn('Supabase auth initialization fallback:', err.message);
-        const storedUser = localStorage.getItem('dataraksha_user');
-        const storedToken = localStorage.getItem('dataraksha_auth_token');
-        if (storedUser && storedToken) {
-          try {
-            const parsedUser = JSON.parse(storedUser);
-            if (mounted) syncAuthState(null, parsedUser);
-          } catch {
-            localStorage.removeItem('dataraksha_user');
-            localStorage.removeItem('dataraksha_auth_token');
-            if (mounted) syncAuthState(null, null);
-          }
-        } else {
-          if (mounted) syncAuthState(null, null);
-        }
+        console.warn('Supabase auth session initialization error:', err.message);
+        if (mounted) await syncAuthState(null);
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -148,30 +160,38 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // Subscribe to auth state changes from Supabase
+    // Subscribe to Supabase auth events
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
         if (!mounted) return;
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          syncAuthState(currentSession);
-        } else if (event === 'SIGNED_OUT') {
-          // Do not wipe auth state if user is logged in with local/demo credentials
-          const storedToken = localStorage.getItem('dataraksha_auth_token');
-          if (storedToken && storedToken.startsWith('demo_jwt_token')) {
-            return;
+        if (
+          event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'USER_UPDATED' ||
+          event === 'INITIAL_SESSION'
+        ) {
+          if (currentSession) {
+            await syncAuthState(currentSession);
           }
-          syncAuthState(null, null);
+        } else if (event === 'SIGNED_OUT') {
+          await syncAuthState(null);
         }
       }
     );
 
-    // Listen to unauthorized interceptor events
-    const handleUnauthorizedEvent = () => {
-      const storedToken = localStorage.getItem('dataraksha_auth_token');
-      if (storedToken && storedToken.startsWith('demo_jwt_token')) {
-        return;
+    // Listen to unauthorized interceptor events from api.js
+    const handleUnauthorizedEvent = async () => {
+      if (!mounted) return;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data?.session) {
+          await syncAuthState(data.session);
+          return;
+        }
+      } catch (err) {
+        console.warn('Session check during unauthorized event failed:', err);
       }
-      syncAuthState(null, null);
+      await syncAuthState(null);
     };
     window.addEventListener('dataraksha:unauthorized', handleUnauthorizedEvent);
 
@@ -180,223 +200,136 @@ export const AuthProvider = ({ children }) => {
       authListener?.subscription?.unsubscribe();
       window.removeEventListener('dataraksha:unauthorized', handleUnauthorizedEvent);
     };
-  }, []);
+  }, [syncAuthState]);
 
-  // Helper to get local user registry
-  const getLocalUserRegistry = () => {
-    try {
-      const data = localStorage.getItem('dataraksha_registered_users');
-      return data ? JSON.parse(data) : {};
-    } catch {
-      return {};
+  // Login handler using real Supabase Authentication
+  const login = async ({ email, password }) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('No internet connection. Please check your network and try again.');
     }
-  };
 
-  const saveLocalUserRegistry = (registry) => {
-    try {
-      localStorage.setItem('dataraksha_registered_users', JSON.stringify(registry));
-    } catch (e) {
-      console.warn('Could not save local user registry', e);
-    }
-  };
-
-  // Login handler: guarantees anyone can sign in smoothly to check their score
-  const login = async ({ email, password, name = '', fullName = '' }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPassword = (password || '').toString().trim() || 'DataRaksha@2026';
+    const cleanPassword = (password || '').toString();
 
     if (!cleanEmail) {
       throw new Error('Email address is required.');
     }
-
-    const rawName = (name || fullName || '').trim();
-
-    try {
-      // 1. Attempt Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanPassword,
-      });
-
-      if (!error && data?.session && data?.user) {
-        const personName =
-          rawName ||
-          data.user?.user_metadata?.full_name ||
-          data.user?.user_metadata?.name ||
-          cleanEmail.split('@')[0];
-
-        localStorage.setItem('dataraksha_person_name', personName);
-        localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-        const activeUser = {
-          ...data.user,
-          displayName: personName,
-        };
-        syncAuthState(data.session, activeUser);
-        return { success: true, user: activeUser };
-      }
-
-      // If Supabase authentication returned error (e.g. invalid credentials, unconfirmed email, or offline)
-      // Check local user registry first
-      const registry = getLocalUserRegistry();
-      const existing = registry[cleanEmail];
-      const personName = (existing && existing.name) || rawName || cleanEmail.split('@')[0];
-      const userRole = (existing && existing.role) || (cleanEmail.includes('admin') ? 'admin' : 'individual');
-      const userId = (existing && existing.id) || 'user-' + Math.random().toString(36).substring(2, 9);
-
-      // Save / update registry entry
-      registry[cleanEmail] = {
-        id: userId,
-        email: cleanEmail,
-        name: personName,
-        password: cleanPassword,
-        role: userRole,
-        created_at: (existing && existing.created_at) || new Date().toISOString(),
-      };
-      saveLocalUserRegistry(registry);
-
-      localStorage.setItem('dataraksha_person_name', personName);
-      localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-      const localUser = {
-        id: userId,
-        email: cleanEmail,
-        displayName: personName,
-        name: personName,
-        role: userRole,
-        created_at: registry[cleanEmail].created_at,
-        token: `demo_jwt_token_${userRole}_${Date.now()}`,
-      };
-      syncAuthState(null, localUser);
-      return { success: true, user: localUser };
-    } catch (err) {
-      // Graceful fallback: ensure any user can sign in and access their dashboard and score
-      const registry = getLocalUserRegistry();
-      const userRole = cleanEmail.includes('admin') ? 'admin' : 'individual';
-      const personName = rawName || cleanEmail.split('@')[0];
-      const userId = 'user-' + Math.random().toString(36).substring(2, 9);
-
-      registry[cleanEmail] = {
-        id: userId,
-        email: cleanEmail,
-        name: personName,
-        password: cleanPassword,
-        role: userRole,
-        created_at: new Date().toISOString(),
-      };
-      saveLocalUserRegistry(registry);
-
-      localStorage.setItem('dataraksha_person_name', personName);
-      localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-      const enrolledUser = {
-        id: userId,
-        email: cleanEmail,
-        displayName: personName,
-        name: personName,
-        role: userRole,
-        created_at: new Date().toISOString(),
-        token: `demo_jwt_token_${userRole}_${Date.now()}`,
-      };
-      syncAuthState(null, enrolledUser);
-      return { success: true, user: enrolledUser };
+    if (!cleanPassword) {
+      throw new Error('Password is required.');
     }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPassword,
+    });
+
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('invalid login credentials')) {
+        throw new Error('Invalid email or password. Please verify your credentials.');
+      }
+      if (msg.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Email address has not been verified. Please check your inbox.');
+      }
+      throw new Error(msg || 'Sign in failed. Please check your credentials.');
+    }
+
+    if (!data?.session || !data?.user) {
+      throw new Error('Authentication failed. No active session returned.');
+    }
+
+    // Verify role directly from database
+    const dbRole = await fetchProfileRole(data.user.id);
+    const resolvedRole =
+      data.user.app_metadata?.role === 'admin' || dbRole === 'admin' ? 'admin' : 'individual';
+    const displayName = resolveUserDisplayName(data.user);
+
+    localStorage.setItem('dataraksha_saved_email', cleanEmail);
+    if (displayName) {
+      localStorage.setItem('dataraksha_person_name', displayName);
+    }
+
+    const activeUser = {
+      ...data.user,
+      role: resolvedRole,
+      displayName,
+    };
+
+    await syncAuthState(data.session, activeUser);
+
+    return {
+      success: true,
+      user: activeUser,
+      role: resolvedRole,
+      isAdmin: resolvedRole === 'admin',
+    };
   };
 
-  // Sign up handler with validation and automatic login
-  const signup = async ({ fullName = '', email, password, role: selectedRole = 'individual' }) => {
-    let cleanName = (fullName || '').trim();
-    const cleanEmail = (email || '').trim().toLowerCase();
-    let cleanPassword = (password || '').toString().trim() || 'DataRaksha@2026';
-    if (cleanPassword.length < 8) {
-      cleanPassword = cleanPassword.padEnd(8, '0');
+  // Sign up handler using real Supabase Authentication
+  const signup = async ({ fullName = '', email, password }) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('No internet connection. Please check your network and try again.');
     }
+
+    const cleanName = (fullName || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').toString();
 
     if (!cleanName) {
-      cleanName = cleanEmail.split('@')[0] || 'User';
+      throw new Error('Full name is required.');
     }
     if (!cleanEmail) {
       throw new Error('Email address is required.');
     }
+    if (!cleanPassword || cleanPassword.length < 8) {
+      throw new Error('Password must be at least 8 characters long.');
+    }
 
-    try {
-      const { data } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: cleanPassword,
-        options: {
-          data: {
-            full_name: cleanName,
-            role: selectedRole,
-          },
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: cleanPassword,
+      options: {
+        data: {
+          full_name: cleanName,
+          role: 'individual',
         },
-      });
+      },
+    });
 
-      const registry = getLocalUserRegistry();
-      const userId = data?.user?.id || 'user-' + Math.random().toString(36).substring(2, 9);
-      registry[cleanEmail] = {
-        id: userId,
-        email: cleanEmail,
-        name: cleanName,
-        password: cleanPassword,
-        role: selectedRole,
-        created_at: new Date().toISOString(),
-      };
-      saveLocalUserRegistry(registry);
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('unique')) {
+        throw new Error('An account with this email address is already registered. Please sign in instead.');
+      }
+      throw new Error(msg || 'Registration failed. Please try again.');
+    }
 
-      const personName = cleanName || cleanEmail.split('@')[0];
-      localStorage.setItem('dataraksha_person_name', personName);
-      localStorage.setItem('dataraksha_saved_email', cleanEmail);
+    localStorage.setItem('dataraksha_saved_email', cleanEmail);
+    localStorage.setItem('dataraksha_person_name', cleanName);
 
+    // If session was established immediately (email confirmation disabled or auto-confirmed)
+    if (data?.session && data?.user) {
       const activeUser = {
-        id: userId,
-        email: cleanEmail,
-        displayName: personName,
-        name: personName,
-        role: selectedRole,
-        created_at: new Date().toISOString(),
-        token: data?.session?.access_token || `demo_jwt_token_${selectedRole}_${Date.now()}`,
+        ...data.user,
+        role: 'individual',
+        displayName: cleanName,
       };
-      syncAuthState(data?.session || null, activeUser);
-
+      await syncAuthState(data.session, activeUser);
       return {
         success: true,
         user: activeUser,
-        requiresEmailVerification: false,
-      };
-    } catch (err) {
-      const registry = getLocalUserRegistry();
-      const userId = 'user-' + Math.random().toString(36).substring(2, 9);
-      registry[cleanEmail] = {
-        id: userId,
-        email: cleanEmail,
-        name: cleanName,
-        password: cleanPassword,
-        role: selectedRole,
-        created_at: new Date().toISOString(),
-      };
-      saveLocalUserRegistry(registry);
-
-      const personName = cleanName || cleanEmail.split('@')[0];
-      localStorage.setItem('dataraksha_person_name', personName);
-      localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-      const activeUser = {
-        id: userId,
-        email: cleanEmail,
-        displayName: personName,
-        name: personName,
-        role: selectedRole,
-        created_at: new Date().toISOString(),
-        token: `demo_jwt_token_${selectedRole}_${Date.now()}`,
-      };
-      syncAuthState(null, activeUser);
-
-      return {
-        success: true,
-        user: activeUser,
+        role: 'individual',
         requiresEmailVerification: false,
       };
     }
+
+    // Email verification required
+    return {
+      success: true,
+      user: data?.user || null,
+      role: 'individual',
+      requiresEmailVerification: true,
+    };
   };
 
   // Logout handler
@@ -406,108 +339,50 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Signout warning:', err.message);
     } finally {
-      localStorage.removeItem('dataraksha_auth_token');
-      localStorage.removeItem('dataraksha_user');
-      localStorage.removeItem('dataraksha_person_name');
-      localStorage.removeItem('dataraksha_saved_email');
-      syncAuthState(null, null);
+      await syncAuthState(null);
     }
   };
 
   // Password reset request
   const resetPassword = async (email) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}`,
-      });
-      if (error) throw error;
-      return { success: true };
-    } catch (err) {
-      const isPlaceholder =
-        err.message?.includes('placeholder') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('Invalid API key') ||
-        err.message?.includes('fetch');
-
-      if (isPlaceholder) {
-        return { success: true, isDemo: true };
-      }
-      throw err;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('No internet connection. Please check your network and try again.');
     }
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new Error('Please enter your registered email address.');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: `${window.location.origin}#auth`,
+    });
+    if (error) throw new Error(error.message || 'Could not send reset link.');
+    return { success: true };
   };
 
-  // Update password (when authenticated or in recovery mode)
+  // Update password (when in recovery session)
   const updatePassword = async (newPassword) => {
-    try {
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw error;
-      return { success: true, user: data.user };
-    } catch (err) {
-      const isPlaceholder =
-        err.message?.includes('placeholder') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('Invalid API key');
-
-      if (isPlaceholder) {
-        return { success: true, isDemo: true };
-      }
-      throw err;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('No internet connection. Please check your network and try again.');
     }
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) throw new Error(error.message || 'Failed to update password.');
+    return { success: true, user: data.user };
   };
 
-  // Quick switch for developers / reviewers
-  const setDemoAuth = (targetRole = 'individual', customName = '') => {
-    const isTargetAdmin = targetRole === 'admin';
-    const savedName = localStorage.getItem('dataraksha_person_name') || 'Kalyani';
-    const name = customName || (isTargetAdmin ? 'Admin (Kalyani)' : savedName);
-    localStorage.setItem('dataraksha_person_name', name);
-    const demoUser = {
-      id: isTargetAdmin ? 'admin-001-sec' : 'user-001-ind',
-      email: isTargetAdmin ? 'admin@dataraksha.ai' : 'kalyani@example.com',
-      full_name: name,
-      displayName: name,
-      role: isTargetAdmin ? 'admin' : 'individual',
-      created_at: new Date().toISOString(),
-      token: `demo_jwt_token_${targetRole}_${Date.now()}`,
-    };
-    syncAuthState(null, demoUser);
-  };
-
-  // Sign in or associate user from Google OAuth / GIS connection
-  const loginWithGoogle = async ({ email, name = '', token = '' } = {}) => {
-    const cleanEmail = (email || '').trim().toLowerCase() || 'connected.user@gmail.com';
+  // Google OAuth / Gmail connection state helper
+  const loginWithGoogle = async ({ email = '', name = '' } = {}) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
     const personName = (name || '').trim() || cleanEmail.split('@')[0];
-    const registry = getLocalUserRegistry();
-    const existing = registry[cleanEmail];
-    const userId = (existing && existing.id) || 'google-' + Math.random().toString(36).substring(2, 9);
-
-    registry[cleanEmail] = {
-      id: userId,
-      email: cleanEmail,
-      name: personName,
-      role: 'individual',
-      created_at: (existing && existing.created_at) || new Date().toISOString(),
-      provider: 'google',
-    };
-    saveLocalUserRegistry(registry);
-
-    localStorage.setItem('dataraksha_person_name', personName);
-    localStorage.setItem('dataraksha_saved_email', cleanEmail);
-
-    const activeToken = token || `demo_jwt_token_google_${Date.now()}`;
-    const googleUser = {
-      id: userId,
-      email: cleanEmail,
-      displayName: personName,
-      name: personName,
-      role: 'individual',
-      created_at: registry[cleanEmail].created_at,
-      token: activeToken,
-    };
-    syncAuthState(null, googleUser);
-    return { success: true, user: googleUser };
+    if (cleanEmail) {
+      localStorage.setItem('dataraksha_gmail_email', cleanEmail);
+      localStorage.setItem('dataraksha_gmail_connected', 'true');
+    }
+    if (personName && !localStorage.getItem('dataraksha_person_name')) {
+      localStorage.setItem('dataraksha_person_name', personName);
+    }
+    return { success: true };
   };
 
   const value = {
@@ -515,18 +390,16 @@ export const AuthProvider = ({ children }) => {
     session,
     token,
     role,
-    isAuthenticated: Boolean(user && (token || localStorage.getItem('dataraksha_auth_token'))),
+    isAuthenticated: Boolean((user || session?.user) && (token || session?.access_token)),
     isAdmin: role === 'admin',
     isLoading,
+    isOnline,
     login,
     signup,
     logout,
     resetPassword,
     updatePassword,
-    setDemoAuth,
     loginWithGoogle,
-    loginAsDemoUser: () => setDemoAuth('individual', 'Kalyani'),
-    loginAsDemoAdmin: () => setDemoAuth('admin', 'Administrator'),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -539,5 +412,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export default AuthContext;

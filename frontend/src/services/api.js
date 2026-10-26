@@ -2,8 +2,13 @@ import axios from 'axios';
 
 const getApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && envUrl) {
-    return envUrl.replace('//localhost:', '//127.0.0.1:');
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // If accessed over local network IP or 127.0.0.1, match the backend host automatically
+    if (host && host !== 'localhost' && (!envUrl || !envUrl.startsWith('https://'))) {
+      const port = (envUrl && envUrl.match(/:(\d+)/)?.[1]) || '8000';
+      return `http://${host}:${port}/api/v1`;
+    }
   }
   return envUrl || 'http://localhost:8000/api/v1';
 };
@@ -41,12 +46,19 @@ apiClient.interceptors.response.use(
       error.friendlyMessage = `Cannot connect to DataRaksha backend at ${API_BASE_URL}. Please ensure the FastAPI server is running on port 8000.`;
     }
     if (error.response && error.response.status === 401) {
+      const requestUrl = error.config?.url || '';
+      // Do not log out or kick user to login screen for auxiliary, health, or scan checks
+      if (
+        requestUrl.includes('/history') ||
+        requestUrl.includes('/health') ||
+        requestUrl.includes('/gmail/status') ||
+        requestUrl.includes('/scan/')
+      ) {
+        return Promise.reject(error);
+      }
+
       const token = localStorage.getItem('dataraksha_auth_token');
       if (token && !token.startsWith('demo_jwt_token')) {
-        localStorage.removeItem('dataraksha_auth_token');
-        localStorage.removeItem('dataraksha_user');
-        localStorage.removeItem('dataraksha_person_name');
-        localStorage.removeItem('dataraksha_saved_email');
         window.dispatchEvent(
           new CustomEvent('dataraksha:unauthorized', {
             detail: {

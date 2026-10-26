@@ -17,6 +17,7 @@ import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
 import { gmailService } from '../services/gmailService';
+import { historyService } from '../services/historyService';
 import { useAuth } from '../context/AuthContext';
 
 // Scenario presets matching real threat cases
@@ -59,8 +60,8 @@ const EMAIL_PRESETS = [
   },
 ];
 
-export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAuth }) => {
-  const { isAuthenticated, user, loginWithGoogle } = useAuth();
+export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAuth, initialData }) => {
+  const { isAuthenticated, user, loginWithGoogle, isOnline } = useAuth();
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [emailContent, setEmailContent] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
@@ -75,6 +76,17 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
   const [inboxEmails, setInboxEmails] = useState([]);
   const [directEmailInput, setDirectEmailInput] = useState('');
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.content) {
+      const text = initialData.preview || initialData.content;
+      setEmailContent(text);
+      if (initialData.sender) setSenderEmail(initialData.sender);
+      if (initialData.subject) setEmailSubject(initialData.subject);
+      runEmailScan(text, initialData.sender || '', initialData.subject || '');
+    }
+  }, [initialData]);
 
   // Smooth scroll down to threat risk card whenever result is populated
   useEffect(() => {
@@ -202,6 +214,14 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
   const runEmailScan = async (contentToScan, sender = '', subject = '') => {
     if (!contentToScan || !contentToScan.trim()) return;
 
+    if (!navigator.onLine || isOnline === false) {
+      setAlert({
+        type: 'warning',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setAlert(null);
 
@@ -217,21 +237,57 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
           subject: subject || emailSubject,
         });
         setResult(data);
+        historyService.saveScanRecord({
+          scan_type: 'email',
+          preview: contentToScan,
+          result: data,
+          target_company: sender || 'Gmail Inbox',
+          userId: user?.id,
+        });
         return;
       }
 
-      // For sample threat scenarios or pasted content, use core message scanner (with client-side fallback)
+      // For sample threat scenarios or pasted content, use core message scanner
       const data = await scanService.scanMessage(contentToScan);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'email',
+        preview: contentToScan,
+        result: data,
+        target_company: sender || 'Email Communication',
+        userId: user?.id,
+      });
     } catch (err) {
-      console.warn('Dedicated email scan failed, falling back to general message scanner:', err);
+      console.warn('Dedicated email scan failed, attempting message scanner:', err);
       try {
         const fallbackData = await scanService.scanMessage(contentToScan);
         setResult(fallbackData);
+        historyService.saveScanRecord({
+          scan_type: 'email',
+          preview: contentToScan,
+          result: fallbackData,
+          target_company: sender || 'Email Communication',
+          userId: user?.id,
+        });
       } catch (fallbackErr) {
+        const errMsg =
+          fallbackErr.friendlyMessage ||
+          fallbackErr.response?.data?.detail ||
+          fallbackErr.message ||
+          'Failed to complete email threat scan. Please try again.';
+
         setAlert({
           type: 'error',
-          message: fallbackErr.friendlyMessage || fallbackErr.response?.data?.detail || fallbackErr.message || 'Failed to complete email threat scan. Please try again.',
+          message: errMsg,
+          action: (
+            <button
+              type="button"
+              className="btn btn-secondary action-sm"
+              onClick={() => runEmailScan(contentToScan, sender, subject)}
+            >
+              Retry
+            </button>
+          ),
         });
       }
     } finally {
@@ -796,11 +852,16 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
                       id="analyse-email-btn"
                       className="btn btn-primary"
                       onClick={handleScanEmail}
-                      disabled={isLoading}
+                      disabled={isLoading || !isOnline}
+                      title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Email'}
                     >
                       {isLoading ? (
                         <>
                           <div className="spinner sm" /> Analysing with Gemini...
+                        </>
+                      ) : !isOnline ? (
+                        <>
+                          <Shield size={16} /> Offline (No Connection)
                         </>
                       ) : (
                         <>

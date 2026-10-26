@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -8,8 +8,11 @@ import {
   ArrowRight,
   ChevronRight,
   Layers,
+  Inbox,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { historyService } from '../services/historyService';
 
 export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
   const { user, isAuthenticated } = useAuth();
@@ -17,107 +20,125 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
     user?.displayName ||
     user?.name ||
     user?.full_name ||
-    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
     (user?.email ? user.email.split('@')[0] : 'User');
 
-  // Baseline stats matching reference design with Digital Safety Score
+  const [historyList, setHistoryList] = useState(() =>
+    user?.id ? historyService.getStoredScans(user.id) : []
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      setHistoryList([]);
+      return;
+    }
+
+    // Initial fetch from local store for this user
+    setHistoryList(historyService.getStoredScans(user.id));
+
+    // Sync remote scans strictly for this user
+    historyService.fetchAndSyncHistory(user.id).then((synced) => {
+      if (Array.isArray(synced)) {
+        setHistoryList(synced);
+      }
+    });
+
+    const handleUpdate = (e) => {
+      if (e.detail?.userId && e.detail.userId !== user.id) {
+        return; // Ignore events from other users
+      }
+      if (Array.isArray(e.detail?.allRecords)) {
+        const myRecords = e.detail.allRecords.filter((r) => r.user_id === user.id);
+        setHistoryList(myRecords);
+      } else {
+        setHistoryList(historyService.getStoredScans(user.id));
+      }
+    };
+
+    window.addEventListener('dataraksha:history_updated', handleUpdate);
+    return () => window.removeEventListener('dataraksha:history_updated', handleUpdate);
+  }, [isAuthenticated, user?.id]);
+
+  const totalScans = historyList.length;
+  const highRiskCount = historyList.filter((item) => item.risk_level === 'High').length;
+  const lowRiskCount = historyList.filter((item) => item.risk_level === 'Low').length;
+
+  let calculatedScore = null;
+  let scoreLevel = 'Not enough data yet';
+
+  if (totalScans > 0) {
+    const penalty = highRiskCount * 18 + (totalScans - highRiskCount - lowRiskCount) * 6;
+    calculatedScore = Math.max(20, Math.min(100, 100 - penalty));
+    scoreLevel =
+      calculatedScore >= 80
+        ? 'High Protection Level'
+        : calculatedScore >= 60
+        ? 'Moderate Protection'
+        : 'Attention Advised';
+  }
+
+  // Real stats calculated strictly from authentic records
   const stats = [
     {
       id: 'score',
       label: 'Digital Safety Score',
-      value: '84/100',
-      subtext: 'High Protection Level',
+      value: totalScans === 0 ? 'No score available' : `${calculatedScore}/100`,
+      subtext: totalScans === 0 ? 'Not enough data yet' : scoreLevel,
       icon: ShieldCheck,
-      colorClass: 'green',
-      barColor: '#10b981',
-      progressPercent: 84,
+      colorClass: totalScans === 0 ? 'neutral' : calculatedScore >= 70 ? 'green' : calculatedScore >= 50 ? 'amber' : 'red',
+      barColor: totalScans === 0 ? '#94a3b8' : calculatedScore >= 70 ? '#10b981' : calculatedScore >= 50 ? '#f59e0b' : '#ef4444',
+      progressPercent: totalScans === 0 ? 0 : calculatedScore,
     },
     {
       id: 'total',
       label: 'Total Analyses',
-      value: 12,
-      subtext: 'across all engines',
+      value: totalScans,
+      subtext: totalScans === 0 ? 'No scans performed yet' : 'Completed scans',
       icon: Layers,
       colorClass: 'blue',
       barColor: '#2563eb',
-      progressPercent: 100,
+      progressPercent: totalScans > 0 ? 100 : 0,
     },
     {
       id: 'high-risk',
-      label: 'High Risk',
-      value: 2,
-      subtext: 'threats intercepted',
+      label: 'High Risk Threats',
+      value: highRiskCount,
+      subtext: highRiskCount === 1 ? '1 threat intercepted' : `${highRiskCount} threats intercepted`,
       icon: ShieldAlert,
       colorClass: 'red',
       barColor: '#ef4444',
-      progressPercent: 17,
+      progressPercent: totalScans > 0 ? Math.round((highRiskCount / totalScans) * 100) : 0,
     },
     {
       id: 'low-risk',
-      label: 'Low Risk',
-      value: 6,
-      subtext: 'verified safe items',
+      label: 'Clean / Low Risk',
+      value: lowRiskCount,
+      subtext: 'Verified safe items',
       icon: ShieldCheck,
       colorClass: 'green',
       barColor: '#10b981',
-      progressPercent: 50,
+      progressPercent: totalScans > 0 ? Math.round((lowRiskCount / totalScans) * 100) : 0,
     },
   ];
 
-  // Exact 4 activity items from Reference Screen 5
-  const recentActivities = [
-    {
-      id: 'act-1',
-      type: 'email',
-      title: 'Email Analysis',
-      subtitle: 'Suspicious link detected',
-      risk: 'High',
-      badgeClass: 'risk-badge-high',
-      icon: Mail,
-      iconColorClass: 'red',
-      date: '16 Oct 2026, 2:30 PM',
-      preview:
-        'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately...',
-    },
-    {
-      id: 'act-2',
-      type: 'url',
-      title: 'URL Analysis',
-      subtitle: 'Safe website',
-      risk: 'Low',
-      badgeClass: 'risk-badge-low',
-      icon: Link2,
-      iconColorClass: 'green',
-      date: '16 Oct 2026, 11:30 AM',
-      preview: 'https://google.com',
-    },
-    {
-      id: 'act-3',
-      type: 'policy',
-      title: 'Privacy Policy',
-      subtitle: 'Data sharing details found',
-      risk: 'Medium',
-      badgeClass: 'risk-badge-medium',
-      icon: FileText,
-      iconColorClass: 'amber',
-      date: '15 Oct 2026, 4:15 PM',
-      preview:
-        'We collect your exact GPS location, browser history, microphone telemetry, and share with data brokers and third-party syndicates without explicit prior consent...',
-    },
-    {
-      id: 'act-4',
-      type: 'email',
-      title: 'Email Analysis',
-      subtitle: 'Phishing attempt detected',
-      risk: 'High',
-      badgeClass: 'risk-badge-high',
-      icon: Mail,
-      iconColorClass: 'red',
-      date: '14 Oct 2026, 1:10 PM',
-      preview:
-        'CONGRATULATIONS! Your mobile number won 1st prize of $1,000,000 in the International Mobile Rewards Draw. Claim immediately...',
-    },
-  ];
+  const recentActivities = historyList.slice(0, 4).map((item) => ({
+    id: item.id,
+    type: item.scan_type,
+    title: item.title,
+    subtitle: item.summary || 'Security assessment completed.',
+    risk: item.risk_level,
+    badgeClass:
+      item.badgeClass ||
+      (item.risk_level === 'High'
+        ? 'risk-badge-high'
+        : item.risk_level === 'Medium'
+        ? 'risk-badge-medium'
+        : 'risk-badge-low'),
+    icon: item.scan_type === 'email' ? Mail : item.scan_type === 'url' ? Link2 : FileText,
+    iconColorClass: item.risk_level === 'High' ? 'red' : item.risk_level === 'Medium' ? 'amber' : 'green',
+    date: item.timestamp,
+    preview: item.preview,
+    target_company: item.target_company,
+  }));
 
   const handleItemClick = (activity) => {
     if (onSelectActivity) {
@@ -129,15 +150,75 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
 
   return (
     <div className="dashboard-overview-page" id="dashboard-overview">
-      {/* Top Page Header - Only Welcome vaishnavi */}
+      {/* Personalized Greeting Header */}
       <div className="inner-page-header">
         <h1 className="header-title">
-          Welcome, <span className="text-blue">{displayName}</span>
+          Hello, <span className="text-blue">{displayName}</span>
         </h1>
+        <p className="header-subtitle text-muted">
+          Welcome to your DataRaksha AI risk protection dashboard.
+        </p>
       </div>
 
-      {/* 3 Metric Stat Cards Row */}
-      <div className="dashboard-stats-grid">
+      {/* 3 Core Tools Launch Section (Requirement 4) */}
+      <div className="dashboard-tools-section mb-6">
+        <h2 className="section-subtitle mb-3">Security Tools</h2>
+        <div className="dashboard-quick-actions-bar">
+          {/* Tool 1: Email Security Analysis */}
+          <button
+            type="button"
+            id="tool-email-analysis"
+            className="quick-action-card card"
+            onClick={() => onNavigate('email')}
+          >
+            <div className="quick-action-icon blue">
+              <Mail size={22} />
+            </div>
+            <div className="quick-action-info">
+              <strong>Email Security Analysis</strong>
+              <p>Detect phishing tactics, urgency cues & sensitive PII leaks</p>
+            </div>
+            <ArrowRight size={18} className="text-blue quick-action-arrow" />
+          </button>
+
+          {/* Tool 2: URL Security Checker */}
+          <button
+            type="button"
+            id="tool-url-checker"
+            className="quick-action-card card"
+            onClick={() => onNavigate('url')}
+          >
+            <div className="quick-action-icon green">
+              <Link2 size={22} />
+            </div>
+            <div className="quick-action-info">
+              <strong>URL Security Checker</strong>
+              <p>Scan links against Google Safe Browsing threat feeds</p>
+            </div>
+            <ArrowRight size={18} className="text-blue quick-action-arrow" />
+          </button>
+
+          {/* Tool 3: Privacy Policy Analyzer */}
+          <button
+            type="button"
+            id="tool-policy-analyzer"
+            className="quick-action-card card"
+            onClick={() => onNavigate('policy')}
+          >
+            <div className="quick-action-icon amber">
+              <FileText size={22} />
+            </div>
+            <div className="quick-action-info">
+              <strong>Privacy Policy Analyzer</strong>
+              <p>Demystify clauses, uncover data brokers & statutory rights</p>
+            </div>
+            <ArrowRight size={18} className="text-blue quick-action-arrow" />
+          </button>
+        </div>
+      </div>
+
+      {/* Genuine Metric Stats Grid */}
+      <div className="dashboard-stats-grid mb-6">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -151,6 +232,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
 
               <div className="stat-card-body">
                 <span className="stat-card-number">{stat.value}</span>
+                <span className="stat-card-subtext">{stat.subtext}</span>
               </div>
 
               <div className="stat-card-progress">
@@ -158,7 +240,7 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
                   className="stat-progress-bar"
                   style={{
                     backgroundColor: stat.barColor,
-                    width: `${typeof stat.progressPercent === 'number' ? stat.progressPercent : Math.min(100, (Number(stat.value) / 12) * 100)}%`,
+                    width: `${stat.progressPercent}%`,
                   }}
                 ></div>
               </div>
@@ -167,101 +249,79 @@ export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
         })}
       </div>
 
-      {/* Recent Activity Section */}
+      {/* Recent Analysis History Section */}
       <div className="recent-activity-card card">
         <div className="activity-card-header">
-          <h2 className="activity-section-title">Recent Activity</h2>
-          <button
-            type="button"
-            className="view-all-link-btn"
-            onClick={() => onNavigate('history')}
-          >
-            <span>View All</span>
-            <ChevronRight size={16} />
-          </button>
+          <h2 className="activity-section-title">Recent Analysis History</h2>
+          {recentActivities.length > 0 && (
+            <button
+              type="button"
+              className="view-all-link-btn"
+              onClick={() => onNavigate('history')}
+            >
+              <span>View Full History</span>
+              <ChevronRight size={16} />
+            </button>
+          )}
         </div>
 
-        {/* List of Recent Activities */}
-        <div className="activity-list-container">
-          {recentActivities.map((act) => {
-            const Icon = act.icon;
-            return (
-              <div
-                key={act.id}
-                id={`activity-row-${act.id}`}
-                className="activity-item-row"
-                onClick={() => handleItemClick(act)}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="activity-item-left">
-                  <div className={`activity-icon-badge ${act.iconColorClass}`}>
-                    <Icon size={18} />
+        {/* Empty State when user has no prior analyses */}
+        {recentActivities.length === 0 ? (
+          <div className="empty-activity-state text-center p-8">
+            <div className="empty-state-icon mx-auto mb-3">
+              <Inbox size={40} className="text-muted" />
+            </div>
+            <h3 className="empty-state-title font-medium text-base mb-1">
+              No analyses yet
+            </h3>
+            <p className="empty-state-desc text-sm text-muted max-w-md mx-auto mb-4">
+              You haven't scanned any emails, web links, or privacy policies yet. Start your first scan to view real risk assessments.
+            </p>
+            <button
+              type="button"
+              id="start-first-scan-btn"
+              className="btn btn-primary action-sm"
+              onClick={() => onNavigate('email')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: '0 auto' }}
+            >
+              <Sparkles size={15} />
+              <span>Start Your First Scan</span>
+            </button>
+          </div>
+        ) : (
+          <div className="activity-list-container">
+            {recentActivities.map((act) => {
+              const Icon = act.icon;
+              return (
+                <div
+                  key={act.id}
+                  id={`activity-row-${act.id}`}
+                  className="activity-item-row"
+                  onClick={() => handleItemClick(act)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="activity-item-left">
+                    <div className={`activity-icon-badge ${act.iconColorClass}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="activity-info">
+                      <span className="activity-item-title">{act.title}</span>
+                      <span className="activity-item-sub">{act.subtitle}</span>
+                    </div>
                   </div>
-                  <div className="activity-info">
-                    <span className="activity-item-title">{act.title}</span>
-                    <span className="activity-item-sub">{act.subtitle}</span>
+
+                  <div className="activity-item-right">
+                    <span className={`risk-badge ${act.badgeClass}`}>
+                      {act.risk} Risk
+                    </span>
+                    <ArrowRight size={16} className="activity-arrow text-muted" />
                   </div>
                 </div>
-
-                <div className="activity-item-right">
-                  <span className={`risk-badge ${act.badgeClass}`}>
-                    {act.risk} Risk
-                  </span>
-                  <ArrowRight size={16} className="activity-arrow text-muted" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Quick Launch Defense Modules Bar */}
-      <div className="dashboard-quick-actions-bar">
-        <button
-          type="button"
-          className="quick-action-card card"
-          onClick={() => onNavigate('email')}
-        >
-          <div className="quick-action-icon blue">
-            <Mail size={20} />
+              );
+            })}
           </div>
-          <div>
-            <strong>Scan Suspicious Email</strong>
-            <p>Paste text or connect Gmail</p>
-          </div>
-          <ArrowRight size={16} className="text-blue quick-action-arrow" />
-        </button>
-
-        <button
-          type="button"
-          className="quick-action-card card"
-          onClick={() => onNavigate('url')}
-        >
-          <div className="quick-action-icon green">
-            <Link2 size={20} />
-          </div>
-          <div>
-            <strong>Check Web Link</strong>
-            <p>Verify against Safe Browsing</p>
-          </div>
-          <ArrowRight size={16} className="text-blue quick-action-arrow" />
-        </button>
-
-        <button
-          type="button"
-          className="quick-action-card card"
-          onClick={() => onNavigate('policy')}
-        >
-          <div className="quick-action-icon amber">
-            <FileText size={20} />
-          </div>
-          <div>
-            <strong>Simplify Privacy Policy</strong>
-            <p>Uncover broker clauses & DPDP rights</p>
-          </div>
-          <ArrowRight size={16} className="text-blue quick-action-arrow" />
-        </button>
+        )}
       </div>
     </div>
   );

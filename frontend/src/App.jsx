@@ -11,17 +11,18 @@ import AuthPage from './pages/AuthPage';
 import Sidebar from './components/common/Sidebar';
 import Alert from './components/common/Alert';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Shield, Menu, X, ArrowLeft } from 'lucide-react';
+import { Shield, Menu, X, ArrowLeft, WifiOff } from 'lucide-react';
 import './App.css';
 
-// Protected routes requiring active authentication (scanners: email, url, policy are public)
-const PROTECTED_TABS = ['dashboard', 'history', 'letters', 'admin'];
+// All application tools and dashboards require active authentication.
+// Only 'home' and 'auth' are accessible to public visitors.
+const PROTECTED_TABS = ['dashboard', 'email', 'url', 'policy', 'history', 'letters', 'admin'];
 
 // Helper to determine the target tab from window hash or direct pathname
 const getTabFromHash = () => {
   if (typeof window === 'undefined') return 'home';
 
-  // 1. Direct path routing fallback (e.g. /email-safety, /email, /url, /dashboard)
+  // 1. Direct path routing fallback
   const path = window.location.pathname.replace(/^\//, '').toLowerCase().trim();
   if (path === 'email-safety' || path === 'email') return 'email';
   if (path === 'url-safety' || path === 'url') return 'url';
@@ -32,7 +33,7 @@ const getTabFromHash = () => {
   if (path === 'admin') return 'admin';
   if (path === 'auth') return 'auth';
 
-  // 2. Hash routing: strip leading # and any trailing query params (e.g. #email?gmail_connected=true -> email)
+  // 2. Hash routing: strip leading # and any trailing query params
   const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
   const cleanHash = rawHash.split('?')[0].split('&')[0];
   const validTabs = ['home', 'auth', 'dashboard', 'email', 'url', 'policy', 'history', 'letters', 'admin'];
@@ -40,25 +41,32 @@ const getTabFromHash = () => {
 };
 
 function AppContent() {
-  // Navigation tabs matching reference design:
-  // 'home' | 'email' | 'url' | 'policy' | 'dashboard' | 'history' | 'letters' | 'admin' | 'auth'
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [previousTab, setPreviousTab] = useState('home');
   const [redirectTabAfterAuth, setRedirectTabAfterAuth] = useState(null);
   const [authNoticeMessage, setAuthNoticeMessage] = useState('');
+  const [authInitialMode, setAuthInitialMode] = useState('login');
   const [globalAlert, setGlobalAlert] = useState(null);
   const [prefilledLetterData, setPrefilledLetterData] = useState(null);
+  const [scannerInitialData, setScannerInitialData] = useState(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  const { isAuthenticated, isAdmin, user, isLoading } = useAuth();
+  const { isAuthenticated, isAdmin, user, isLoading, isOnline } = useAuth();
 
   // Central Navigation & History Synchronization
-  const navigateToTab = (targetTab, { replace = false, notice = '' } = {}) => {
-    // If target route is protected and user is not authenticated, redirect to Login/Register
+  const navigateToTab = (targetTab, { replace = false, notice = '', mode = 'login' } = {}) => {
+    // If still verifying auth state, switch view without prematurely kicking to login
+    if (isLoading) {
+      setActiveTab(targetTab);
+      return;
+    }
+
+    // If target route is protected and user is not authenticated, redirect to Auth page
     if (PROTECTED_TABS.includes(targetTab) && !isAuthenticated) {
       setRedirectTabAfterAuth(targetTab);
-      setAuthNoticeMessage(notice || 'Please sign in to continue.');
+      setAuthNoticeMessage(notice || 'Please sign in to access this feature.');
+      setAuthInitialMode(mode);
       setPreviousTab(activeTab);
       setActiveTab('auth');
       if (replace) {
@@ -67,6 +75,15 @@ function AppContent() {
         window.history.pushState({ tab: 'auth', redirect: targetTab }, '', '#auth');
       }
       return;
+    }
+
+    // Role-based protection: regular users cannot access admin
+    if (targetTab === 'admin' && isAuthenticated && !isAdmin) {
+      setGlobalAlert({
+        type: 'warning',
+        message: 'Access denied: Administrator privileges required.',
+      });
+      targetTab = 'dashboard';
     }
 
     setPreviousTab(activeTab);
@@ -79,8 +96,9 @@ function AppContent() {
     }
   };
 
-  // Open authentication view with optional return tab and friendly message
-  const handleOpenAuth = (targetAfterAuth = 'dashboard', message = '') => {
+  // Open authentication view with optional return tab, message, and mode ('login' vs 'register')
+  const handleOpenAuth = (mode = 'login', message = '', targetAfterAuth = 'dashboard') => {
+    setAuthInitialMode(mode);
     setRedirectTabAfterAuth(targetAfterAuth);
     setAuthNoticeMessage(message || 'Please sign in to continue.');
     setPreviousTab(activeTab);
@@ -92,7 +110,6 @@ function AppContent() {
   useEffect(() => {
     const handleUnauthorized = (e) => {
       const msg = e.detail?.message || 'Session expired. Please sign in again.';
-      // Only redirect to auth view if user is currently on a protected tab
       if (PROTECTED_TABS.includes(activeTab)) {
         setGlobalAlert({
           type: 'warning',
@@ -101,6 +118,7 @@ function AppContent() {
         navigateToTab('auth', {
           replace: true,
           notice: msg,
+          mode: 'login',
         });
       }
     };
@@ -111,29 +129,43 @@ function AppContent() {
     };
   }, [activeTab]);
 
-  // Central Route Guard: Re-evaluate when activeTab or isAuthenticated changes
+  // Central Route Guard: Re-evaluate when activeTab or authentication changes
   useEffect(() => {
     if (isLoading) return;
 
     if (PROTECTED_TABS.includes(activeTab) && !isAuthenticated) {
       setRedirectTabAfterAuth(activeTab);
-      setAuthNoticeMessage('Please sign in to continue.');
+      setAuthNoticeMessage('Please sign in to access this feature.');
+      setAuthInitialMode('login');
       setActiveTab('auth');
       window.history.replaceState({ tab: 'auth', redirect: activeTab }, '', '#auth');
+    } else if (activeTab === 'admin' && isAuthenticated && !isAdmin) {
+      setGlobalAlert({
+        type: 'warning',
+        message: 'Access denied: Administrator privileges required.',
+      });
+      setActiveTab('dashboard');
+      window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
     }
-  }, [activeTab, isAuthenticated, isLoading]);
+  }, [activeTab, isAuthenticated, isAdmin, isLoading]);
 
   // Browser Back & Forward Button Handling (popstate / hashchange)
   useEffect(() => {
     const handleHistoryChange = (e) => {
+      if (isLoading) return;
+
       const tabFromHash = getTabFromHash();
       const targetTab = e.state?.tab || tabFromHash || 'home';
 
       if (PROTECTED_TABS.includes(targetTab) && !isAuthenticated) {
         setRedirectTabAfterAuth(targetTab);
-        setAuthNoticeMessage('Please sign in to continue.');
+        setAuthNoticeMessage('Please sign in to access this feature.');
+        setAuthInitialMode('login');
         setActiveTab('auth');
         window.history.replaceState({ tab: 'auth', redirect: targetTab }, '', '#auth');
+      } else if (targetTab === 'admin' && isAuthenticated && !isAdmin) {
+        setActiveTab('dashboard');
+        window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
       } else {
         setActiveTab(targetTab);
       }
@@ -145,31 +177,44 @@ function AppContent() {
       window.removeEventListener('popstate', handleHistoryChange);
       window.removeEventListener('hashchange', handleHistoryChange);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isAdmin, isLoading]);
 
-  const handleAuthSuccess = () => {
-    const targetTab = redirectTabAfterAuth || 'dashboard';
+  const handleAuthSuccess = (authUser, authRole) => {
+    const isUserAdmin = authRole === 'admin' || authUser?.role === 'admin' || isAdmin;
+    const requestedTarget = redirectTabAfterAuth || (isUserAdmin ? 'admin' : 'dashboard');
     setRedirectTabAfterAuth(null);
     setAuthNoticeMessage('');
 
     setGlobalAlert({
       type: 'success',
-      message: '✓ Sign in successful! Welcome to DataRaksha AI.',
+      message: '✓ Authentication successful! Welcome to DataRaksha AI.',
     });
     setTimeout(() => {
       setGlobalAlert((current) => (current?.type === 'success' ? null : current));
     }, 3500);
 
-    if (targetTab === 'admin' && !isAdmin) {
-      navigateToTab('dashboard', { replace: true });
-    } else {
-      navigateToTab(targetTab, { replace: true });
-    }
+    const finalTab = requestedTarget === 'admin' && !isUserAdmin ? 'dashboard' : requestedTarget;
+    setPreviousTab('auth');
+    setActiveTab(finalTab);
+    const targetHash = finalTab === 'home' ? '#home' : `#${finalTab}`;
+    window.history.pushState({ tab: finalTab }, '', targetHash);
   };
 
   const handleNavigateToLetters = (data) => {
     setPrefilledLetterData(data);
     navigateToTab('letters');
+  };
+
+  const handleReopenScan = (scan) => {
+    if (!scan) return;
+    setScannerInitialData(scan);
+    const target =
+      scan.scan_type === 'message' || scan.scan_type === 'email' || scan.type === 'email'
+        ? 'email'
+        : scan.scan_type === 'link' || scan.scan_type === 'url' || scan.type === 'url'
+        ? 'url'
+        : 'policy';
+    navigateToTab(target);
   };
 
   // Initial loading splash screen
@@ -190,12 +235,12 @@ function AppContent() {
     );
   }
 
-  // 1. Home / Landing Page (Reference Screen 1)
+  // 1. Home / Landing Page: Displayed to all visitors without signing in
   if (activeTab === 'home') {
     return (
       <HomePage
         onNavigate={(tab) => navigateToTab(tab)}
-        onOpenAuth={(targetTab, message) => handleOpenAuth(targetTab, message)}
+        onOpenAuth={(mode, message) => handleOpenAuth(mode, message, 'dashboard')}
       />
     );
   }
@@ -216,19 +261,21 @@ function AppContent() {
         <AuthPage
           onAuthSuccess={handleAuthSuccess}
           initialMessage={authNoticeMessage}
+          initialMode={authInitialMode}
         />
       </div>
     );
   }
 
-  // 3. Inner Application Views (Screens 2 - 6 with Left Sidebar)
+  // 3. Inner Application Views with Sidebar
   const renderInnerView = () => {
     // Fail-safe protection: block protected component rendering if unauthenticated
     if (PROTECTED_TABS.includes(activeTab) && !isAuthenticated) {
       return (
         <AuthPage
           onAuthSuccess={handleAuthSuccess}
-          initialMessage={authNoticeMessage || 'Please sign in to continue.'}
+          initialMessage={authNoticeMessage || 'Please sign in to access this feature.'}
+          initialMode="login"
         />
       );
     }
@@ -237,25 +284,28 @@ function AppContent() {
       case 'email':
         return (
           <EmailSafetyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab('dashboard')}
             onNavigateToLetters={handleNavigateToLetters}
-            onOpenAuth={(targetTab, msg) => handleOpenAuth(targetTab, msg)}
+            onOpenAuth={(mode, msg) => handleOpenAuth(mode, msg, 'email')}
+            initialData={scannerInitialData}
           />
         );
 
       case 'url':
         return (
           <UrlSafetyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab('dashboard')}
             onNavigateToLetters={handleNavigateToLetters}
+            initialData={scannerInitialData}
           />
         );
 
       case 'policy':
         return (
           <PrivacyPolicyPage
-            onNavigateBack={() => navigateToTab(isAuthenticated ? 'dashboard' : 'home')}
+            onNavigateBack={() => navigateToTab('dashboard')}
             onNavigateToLetters={handleNavigateToLetters}
+            initialData={scannerInitialData}
           />
         );
 
@@ -263,7 +313,7 @@ function AppContent() {
         return (
           <DashboardPage
             onNavigate={(tab) => navigateToTab(tab)}
-            onSelectActivity={(act) => navigateToTab(act.type)}
+            onSelectActivity={(act) => handleReopenScan(act)}
           />
         );
 
@@ -271,7 +321,8 @@ function AppContent() {
         return (
           <AnalysisHistoryPage
             onNavigateBack={() => navigateToTab('dashboard')}
-            onReopenScan={(scan) => navigateToTab(scan.scan_type)}
+            onReopenScan={handleReopenScan}
+            onNavigateToLetters={handleNavigateToLetters}
           />
         );
 
@@ -287,7 +338,7 @@ function AppContent() {
         return (
           <AdminDashboard
             user={user}
-            onPromptLogin={() => handleOpenAuth('admin')}
+            onPromptLogin={() => handleOpenAuth('login', 'Please sign in with administrator credentials.', 'admin')}
           />
         );
 
@@ -303,6 +354,14 @@ function AppContent() {
 
   return (
     <div className={`inner-app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} id="dataraksha-app">
+      {/* Global Offline Network Alert */}
+      {!isOnline && (
+        <div className="global-offline-banner" role="alert">
+          <WifiOff size={18} />
+          <span>No internet connection. Please check your network and try again.</span>
+        </div>
+      )}
+
       {/* Mobile Top Header */}
       <div className="mobile-header-bar">
         <div className="landing-brand">
@@ -321,7 +380,7 @@ function AppContent() {
         </button>
       </div>
 
-      {/* Left Application Sidebar (Screens 2 - 6) */}
+      {/* Left Application Sidebar */}
       <div className={`sidebar-wrapper ${mobileSidebarOpen ? 'mobile-open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <Sidebar
           activeTab={activeTab}
@@ -329,7 +388,7 @@ function AppContent() {
             navigateToTab(tab);
             setMobileSidebarOpen(false);
           }}
-          onOpenAuth={handleOpenAuth}
+          onOpenAuth={(mode, msg, target) => handleOpenAuth(mode, msg, target)}
           isCollapsed={isSidebarCollapsed}
           setIsCollapsed={setIsSidebarCollapsed}
           onCloseMobile={() => setMobileSidebarOpen(false)}

@@ -11,6 +11,7 @@ import {
   AlertCircle,
   KeyRound,
   ShieldCheck,
+  WifiOff,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
@@ -20,12 +21,12 @@ export const AuthPage = ({
   initialMessage = '',
   initialMode = 'login',
 }) => {
-  const { login, signup, resetPassword, loginWithGoogle } = useAuth();
+  const { login, signup, resetPassword, isOnline } = useAuth();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState(initialMode);
 
-  // Check if user has signed in before
+  // Saved email from prior sessions
   const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
 
   // ---------------------------------------------------------------------------
@@ -36,48 +37,6 @@ export const AuthPage = ({
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginErrors, setLoginErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
-  const handleQuickEmailSignIn = async (customEmail = '') => {
-    const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
-    if (!rawEmail || !rawEmail.includes('@')) {
-      setAlert({
-        type: 'warning',
-        message: 'Please enter a valid email address (e.g. iddhik1208@gmail.com) to continue.',
-      });
-      return;
-    }
-
-    setIsLoggingIn(true);
-    setAlert(null);
-
-    try {
-      let res;
-      if (loginWithGoogle) {
-        res = await loginWithGoogle({ email: rawEmail, name: rawEmail.split('@')[0] });
-      } else {
-        res = await login({ email: rawEmail, password: 'DataRaksha@2026' });
-      }
-
-      setAlert({
-        type: 'success',
-        message: `Welcome, ${rawEmail}! Loading your encrypted security profile...`,
-      });
-
-      setTimeout(() => {
-        if (onAuthSuccess) {
-          onAuthSuccess(res.user);
-        }
-      }, 400);
-    } catch (err) {
-      setAlert({
-        type: 'error',
-        message: err.message || 'Could not complete sign in. Please try again.',
-      });
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
   const handleQuickEmailSignIn = async (customEmail = '') => {
     const rawEmail = (customEmail || loginEmail || 'iddhik1208@gmail.com').trim().toLowerCase();
@@ -191,9 +150,8 @@ export const AuthPage = ({
       errors.email = 'Please enter a valid email address (e.g. name@example.com).';
     }
 
-    // Password is fully flexible to ensure any user can sign in smoothly
-    if (loginPassword && !loginPassword.trim()) {
-      errors.password = 'Password cannot contain only spaces.';
+    if (!loginPassword) {
+      errors.password = 'Password is required.';
     }
 
     setLoginErrors(errors);
@@ -204,11 +162,15 @@ export const AuthPage = ({
     if (e) e.preventDefault();
     setAlert(null);
 
-    if (!validateLogin()) {
+    if (!isOnline) {
       setAlert({
         type: 'error',
-        message: '✗ Sign in failed. Please check your email and password.',
+        message: 'No internet connection. Please check your network and try again.',
       });
+      return;
+    }
+
+    if (!validateLogin()) {
       return;
     }
 
@@ -218,28 +180,24 @@ export const AuthPage = ({
       const cleanEmail = loginEmail.trim();
       const result = await login({
         email: cleanEmail,
-        password: loginPassword || 'DataRaksha@2026',
+        password: loginPassword,
       });
 
-      // Display green success notification
       setAlert({
         type: 'success',
-        message: '✓ Sign in successful! Welcome to DataRaksha AI.',
+        message: 'Sign in successful! Redirecting...',
       });
-      setIsRedirecting(true);
 
-      // Keep success message visible on Sign In page for 2.2s (~2-3 seconds) before navigating to Dashboard
       setTimeout(() => {
         if (onAuthSuccess) {
-          onAuthSuccess(result.user);
+          onAuthSuccess(result.user, result.role);
         }
-      }, 2200);
+      }, 500);
     } catch (err) {
       setAlert({
         type: 'error',
-        message: '✗ Sign in failed. Please check your email and password.',
+        message: err.message || 'Sign in failed. Please check your credentials.',
       });
-      setIsRedirecting(false);
     } finally {
       setIsLoggingIn(false);
     }
@@ -265,8 +223,6 @@ export const AuthPage = ({
 
     if (!regPassword) {
       errors.password = 'Password is required.';
-    } else if (!regPassword.trim()) {
-      errors.password = 'Password cannot contain only spaces.';
     } else if (regPassword.length < 8) {
       errors.password = 'Password must be at least 8 characters long.';
     } else {
@@ -291,6 +247,14 @@ export const AuthPage = ({
     if (e) e.preventDefault();
     setAlert(null);
 
+    if (!isOnline) {
+      setAlert({
+        type: 'error',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     if (!validateRegistration()) {
       return;
     }
@@ -305,19 +269,27 @@ export const AuthPage = ({
         fullName: cleanName,
         email: cleanEmail,
         password: regPassword,
-        role: cleanEmail.includes('admin') ? 'admin' : 'individual',
       });
 
-      setAlert({
-        type: 'success',
-        message: 'Account registered successfully! Welcome to DataRaksha AI.',
-      });
-
-      setTimeout(() => {
-        if (onAuthSuccess) {
-          onAuthSuccess(result.user);
-        }
-      }, 700);
+      if (result.requiresEmailVerification) {
+        setAlert({
+          type: 'info',
+          message:
+            '✓ Account created! A confirmation link has been sent to your email. Please verify your email, then sign in.',
+        });
+        setAuthMode('login');
+        setLoginEmail(cleanEmail);
+      } else {
+        setAlert({
+          type: 'success',
+          message: 'Account created successfully! Welcome to DataRaksha AI.',
+        });
+        setTimeout(() => {
+          if (onAuthSuccess) {
+            onAuthSuccess(result.user, result.role || 'individual');
+          }
+        }, 600);
+      }
     } catch (err) {
       setAlert({
         type: 'error',
@@ -333,6 +305,14 @@ export const AuthPage = ({
   // ---------------------------------------------------------------------------
   const handleResetPassword = async (e) => {
     if (e) e.preventDefault();
+    if (!isOnline) {
+      setAlert({
+        type: 'error',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     if (!forgotEmail.trim() || !emailRegex.test(forgotEmail.trim())) {
       setAlert({
         type: 'warning',
@@ -349,12 +329,12 @@ export const AuthPage = ({
       setResetSuccess(true);
       setAlert({
         type: 'success',
-        message: 'Password reset instructions have been sent to your email address.',
+        message: 'Password reset link sent! Please check your email inbox.',
       });
     } catch (err) {
       setAlert({
         type: 'error',
-        message: err.message || 'Failed to send reset link. Please try again shortly.',
+        message: err.message || 'Failed to send reset link. Please check the email and try again.',
       });
     } finally {
       setIsResetting(false);
@@ -374,10 +354,18 @@ export const AuthPage = ({
           </h2>
           <p className="auth-sub-title">
             {authMode === 'login'
-              ? 'Access your privacy shield, threat analytics, and statutory rights portal.'
-              : 'Create an encrypted account to protect your data identity across the web.'}
+              ? 'Sign in to access your digital risk protection dashboard.'
+              : 'Create an account to protect your privacy and analyze digital risks.'}
           </p>
         </div>
+
+        {/* Offline Warning Banner if disconnected */}
+        {!isOnline && (
+          <div className="auth-offline-banner mb-3">
+            <AlertCircle size={16} />
+            <span>No internet connection. Please check your network and try again.</span>
+          </div>
+        )}
 
         {/* Tab Switcher: Sign In vs. Create Account */}
         <div className="auth-tabs-nav" role="tablist" aria-label="Authentication Options">
@@ -391,7 +379,6 @@ export const AuthPage = ({
               setAuthMode('login');
               setShowForgotPassword(false);
               setAlert(null);
-              setIsRedirecting(false);
             }}
           >
             Sign In
@@ -406,7 +393,6 @@ export const AuthPage = ({
               setAuthMode('register');
               setShowForgotPassword(false);
               setAlert(null);
-              setIsRedirecting(false);
             }}
           >
             Create Account
@@ -510,45 +496,19 @@ export const AuthPage = ({
             <button
               id="login-submit-btn"
               type="submit"
-              className={`btn btn-primary auth-submit-btn w-full ${isRedirecting ? 'btn-redirecting' : ''}`}
-              disabled={isLoggingIn || isRedirecting}
+              className="btn btn-primary auth-submit-btn w-full"
+              disabled={isLoggingIn || !isOnline}
             >
-              {isRedirecting ? (
-                <>
-                  <CheckCircle2 size={16} />
-                  <span>Redirecting to Dashboard...</span>
-                </>
-              ) : isLoggingIn ? (
+              {isLoggingIn ? (
                 <>
                   <div className="spinner sm" /> Verifying Credentials...
                 </>
               ) : (
                 <>
-                  <span>Sign In to Dashboard</span>
+                  <span>Sign In</span>
                   <ArrowRight size={16} />
                 </>
               )}
-            </button>
-
-            {/* Instant Sign In for Any Email */}
-            <div style={{ margin: '0.85rem 0 0.65rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                or check email directly
-              </span>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
-            </div>
-
-            <button
-              type="button"
-              id="instant-email-check-btn"
-              className="btn btn-secondary w-full"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.65rem 1rem' }}
-              onClick={() => handleQuickEmailSignIn(loginEmail || 'iddhik1208@gmail.com')}
-              disabled={isLoggingIn}
-            >
-              <Mail size={16} className="text-blue" />
-              <span>Instant Sign In & Check Email Inbox</span>
             </button>
           </form>
         )}
@@ -563,7 +523,7 @@ export const AuthPage = ({
               <div>
                 <h4 className="forgot-title">Reset Your Password</h4>
                 <p className="forgot-desc">
-                  Enter your registered email address and we will send you verification instructions.
+                  Enter your registered email address and we will send you a password reset link.
                 </p>
               </div>
             </div>
@@ -591,9 +551,9 @@ export const AuthPage = ({
               <button
                 type="submit"
                 className="btn btn-primary w-full"
-                disabled={isResetting || resetSuccess}
+                disabled={isResetting || resetSuccess || !isOnline}
               >
-                {isResetting ? 'Sending link...' : resetSuccess ? 'Reset Link Sent' : 'Send Reset Instructions'}
+                {isResetting ? 'Sending link...' : resetSuccess ? 'Reset Link Sent' : 'Send Reset Link'}
               </button>
               <button
                 type="button"
@@ -626,7 +586,7 @@ export const AuthPage = ({
                   id="reg-name-input"
                   type="text"
                   className="input-field auth-text-input"
-                  placeholder="Enter your full legal name"
+                  placeholder="Enter your full name"
                   value={regName}
                   onChange={(e) => {
                     setRegName(e.target.value);
@@ -769,72 +729,21 @@ export const AuthPage = ({
               id="register-submit-btn"
               type="submit"
               className="btn btn-primary auth-submit-btn w-full"
-              disabled={isRegistering}
+              disabled={isRegistering || !isOnline}
             >
               {isRegistering ? (
                 <>
-                  <div className="spinner sm" /> Creating Security Profile...
+                  <div className="spinner sm" /> Creating Account...
                 </>
               ) : (
                 <>
-                  <span>Create Encrypted Account</span>
+                  <span>Create Account</span>
                   <ShieldCheck size={16} />
                 </>
               )}
             </button>
           </form>
         )}
-        {/* Quick Demo Pre-fill Pills */}
-        <div className="auth-quick-fill-section">
-          <span className="quick-fill-label">
-            <Sparkles size={13} /> Quick Demo Profiles:
-          </span>
-          <div className="quick-fill-chips">
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => {
-                setAuthMode('login');
-                handleQuickFill('Kalyani', 'kalyani@dataraksha.ai');
-              }}
-            >
-              Sign In as Kalyani
-            </button>
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => {
-                setAuthMode('login');
-                handleQuickFill('Admin', 'admin@dataraksha.ai');
-              }}
-            >
-              Sign In as Admin
-            </button>
-            <button
-              type="button"
-              className="quick-fill-chip"
-              onClick={() => handleQuickEmailSignIn('iddhik1208@gmail.com')}
-            >
-              Sign In as iddhik1208@gmail.com
-            </button>
-            {savedName && (
-              <button
-                type="button"
-                className="quick-fill-chip reset-chip"
-                onClick={() => {
-                  setLoginEmail('');
-                  setLoginPassword('');
-                  localStorage.removeItem('dataraksha_person_name');
-                  localStorage.removeItem('dataraksha_saved_email');
-                  setLoginErrors({});
-                }}
-                title="Clear saved name"
-              >
-                <RotateCcw size={12} /> Clear Saved
-              </button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

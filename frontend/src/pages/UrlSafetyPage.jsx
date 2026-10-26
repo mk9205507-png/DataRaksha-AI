@@ -12,6 +12,8 @@ import {
 import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
+import { historyService } from '../services/historyService';
+import { useAuth } from '../context/AuthContext';
 
 const EXAMPLE_URLS = [
   { label: 'https://google.com', tag: 'Safe' },
@@ -21,12 +23,22 @@ const EXAMPLE_URLS = [
   { label: 'http://192.168.1.100/secure-update-patch.exe', tag: 'Raw IP' },
 ];
 
-export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
+export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData }) => {
+  const { user, isOnline } = useAuth();
   const [urlInput, setUrlInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [alert, setAlert] = useState(null);
   const resultRef = useRef(null);
+
+  // Auto-populate when re-opened from Scan History
+  useEffect(() => {
+    if (initialData?.preview || initialData?.url) {
+      const url = initialData.preview || initialData.url;
+      setUrlInput(url);
+      runUrlScan(url);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -46,18 +58,45 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
       return;
     }
 
+    if (!navigator.onLine || isOnline === false) {
+      setAlert({
+        type: 'warning',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setAlert(null);
 
     try {
       const data = await scanService.scanLink(trimmed);
       setResult(data);
+      historyService.saveScanRecord({
+        scan_type: 'url',
+        preview: trimmed,
+        result: data,
+        target_company: trimmed,
+        userId: user?.id,
+      });
     } catch (err) {
+      const errMsg =
+        err.message ||
+        err.response?.data?.detail ||
+        'Failed to inspect URL. Ensure it includes http:// or https:// and try again.';
+
       setAlert({
         type: 'error',
-        message:
-          err.response?.data?.detail ||
-          'Failed to inspect URL. Ensure it includes http:// or https:// and try again.',
+        message: errMsg,
+        action: (
+          <button
+            type="button"
+            className="btn btn-secondary action-sm"
+            onClick={() => runUrlScan(trimmed)}
+          >
+            Retry
+          </button>
+        ),
       });
     } finally {
       setIsLoading(false);
@@ -138,11 +177,16 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters }) => {
               id="check-url-btn"
               type="submit"
               className="btn btn-primary url-submit-btn"
-              disabled={isLoading || !urlInput.trim()}
+              disabled={isLoading || !urlInput.trim() || !isOnline}
+              title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Check URL'}
             >
               {isLoading ? (
                 <>
                   <div className="spinner sm" /> Checking...
+                </>
+              ) : !isOnline ? (
+                <>
+                  <Globe size={16} /> Offline
                 </>
               ) : (
                 <>
