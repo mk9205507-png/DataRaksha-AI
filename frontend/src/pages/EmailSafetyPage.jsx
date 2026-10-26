@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
-  Mail,
   Shield,
   Link2,
   AlertTriangle,
@@ -64,11 +63,12 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
   const { isAuthenticated, user, loginWithGoogle, isOnline } = useAuth();
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [emailContent, setEmailContent] = useState('');
-  const [senderEmail, setSenderEmail] = useState('');
+  const [sender, setSender] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
-  const [result, setResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisError, setAnalysisError] = useState('');
   const [alert, setAlert] = useState(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [connectedGmailEmail, setConnectedGmailEmail] = useState('');
@@ -82,20 +82,25 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
     if (initialData?.preview || initialData?.content) {
       const text = initialData.preview || initialData.content;
       setEmailContent(text);
-      if (initialData.sender) setSenderEmail(initialData.sender);
+      if (initialData.sender) setSender(initialData.sender);
       if (initialData.subject) setEmailSubject(initialData.subject);
-      runEmailScan(text, initialData.sender || '', initialData.subject || '');
+      if (initialData.result) {
+        setAnalysisResult(initialData.result);
+      } else {
+        setAnalysisResult(null);
+      }
+      setAnalysisError('');
     }
   }, [initialData]);
 
   // Smooth scroll down to threat risk card whenever result is populated
   useEffect(() => {
-    if (result && resultRef.current) {
+    if (analysisResult && resultRef.current) {
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     }
-  }, [result]);
+  }, [analysisResult]);
 
   // Check URL parameters for OAuth redirect results and check existing connection status
   useEffect(() => {
@@ -169,17 +174,12 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
       if (emails && emails.length > 0) {
         setInboxEmails(emails);
         setIsGoogleConnected(true);
-        // Pre-select first email for instant scanning
-        const first = emails[0];
-        setSelectedPresetId(first.id);
-        setEmailContent(first.content);
-        setSenderEmail(first.sender);
-        setEmailSubject(first.subject || '');
+        setAnalysisResult(null);
+        setAnalysisError('');
         setAlert({
           type: 'success',
-          message: `Loaded ${emails.length} recent inbox emails. Analysing latest email below...`,
+          message: `Loaded ${emails.length} recent inbox emails. Select an email from the dropdown or paste email content to analyse.`,
         });
-        runEmailScan(first.content, first.sender, first.subject);
       } else {
         setAlert({
           type: 'info',
@@ -211,8 +211,8 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
     }
   };
 
-  const runEmailScan = async (contentToScan, sender = '', subject = '') => {
-    if (!contentToScan || !contentToScan.trim()) return;
+  const handleAnalyseEmail = async () => {
+    const content = emailContent.trim();
 
     if (!navigator.onLine || isOnline === false) {
       setAlert({
@@ -222,109 +222,132 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
       return;
     }
 
-    setIsLoading(true);
+    if (!content) {
+      setAnalysisError('Please select an email or enter email content before analysis.');
+      setAlert({
+        type: 'warning',
+        message: 'Please select an email or enter email content before analysis.',
+      });
+      setAnalysisResult(null);
+      return;
+    }
+
+    if (isAnalyzing) return;
+
+    setIsAnalyzing(true);
+    setAnalysisError('');
     setAlert(null);
+    setAnalysisResult(null);
 
     const authToken = localStorage.getItem('dataraksha_auth_token');
     const isInboxEmail = inboxEmails.some((item) => item.id === selectedPresetId);
 
+    // Prepare content for backend analysis: include sender and subject header context if provided
+    let contentToAnalyze = content;
+    if (!isInboxEmail && (sender || emailSubject)) {
+      const headerLines = [];
+      if (sender && !content.toLowerCase().includes(sender.toLowerCase())) {
+        headerLines.push(`From: ${sender}`);
+      }
+      if (emailSubject && !content.toLowerCase().includes(emailSubject.toLowerCase())) {
+        headerLines.push(`Subject: ${emailSubject}`);
+      }
+      if (headerLines.length > 0) {
+        contentToAnalyze = `${headerLines.join('\n')}\n\n${content}`;
+      }
+    }
+
     try {
+      let data;
       // If user is authenticated and scanning a real Gmail inbox email, use dedicated backend endpoint
+      // Passing current editor content ensures any user edits are analyzed rather than original raw message
       if (authToken && isInboxEmail) {
-        const data = await gmailService.analyzeEmail({
-          content: contentToScan,
-          sender: sender || senderEmail,
-          subject: subject || emailSubject,
+        data = await gmailService.analyzeEmail({
+          content,
+          sender: sender || '',
+          subject: emailSubject || '',
         });
-        setResult(data);
-        historyService.saveScanRecord({
-          scan_type: 'email',
-          preview: contentToScan,
-          result: data,
-          target_company: sender || 'Gmail Inbox',
-          userId: user?.id,
-        });
-        return;
+      } else {
+        // For manually pasted, typed, or sample scenario content
+        data = await scanService.scanMessage(contentToAnalyze);
       }
 
-      // For sample threat scenarios or pasted content, use core message scanner
-      const data = await scanService.scanMessage(contentToScan);
-      setResult(data);
+      setAnalysisResult(data);
       historyService.saveScanRecord({
         scan_type: 'email',
-        preview: contentToScan,
+        preview: content,
         result: data,
         target_company: sender || 'Email Communication',
         userId: user?.id,
       });
     } catch (err) {
-      console.warn('Dedicated email scan failed, attempting message scanner:', err);
+      console.warn('Dedicated email scan failed, attempting fallback scanner:', err);
       try {
-        const fallbackData = await scanService.scanMessage(contentToScan);
-        setResult(fallbackData);
+        const fallbackData = await scanService.scanMessage(contentToAnalyze);
+        setAnalysisResult(fallbackData);
         historyService.saveScanRecord({
           scan_type: 'email',
-          preview: contentToScan,
+          preview: content,
           result: fallbackData,
           target_company: sender || 'Email Communication',
           userId: user?.id,
         });
       } catch (fallbackErr) {
-        const errMsg =
+        const errorMessage =
           fallbackErr.friendlyMessage ||
           fallbackErr.response?.data?.detail ||
           fallbackErr.message ||
-          'Failed to complete email threat scan. Please try again.';
-
+          'Email analysis failed. Please try again.';
+        setAnalysisError(errorMessage);
         setAlert({
           type: 'error',
-          message: errMsg,
+          message: errorMessage,
           action: (
             <button
               type="button"
               className="btn btn-secondary action-sm"
-              onClick={() => runEmailScan(contentToScan, sender, subject)}
+              onClick={() => handleAnalyseEmail()}
             >
               Retry
             </button>
           ),
         });
+        setAnalysisResult(null);
       }
     } finally {
-      setIsLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
   const handleSelectPreset = (e) => {
     const selectedId = e.target.value;
     setSelectedPresetId(selectedId);
+    setAnalysisResult(null);
+    setAnalysisError('');
+    setAlert(null);
+
     if (!selectedId) {
       setEmailContent('');
-      setSenderEmail('');
+      setSender('');
       setEmailSubject('');
-      setResult(null);
       return;
     }
 
     // Check inboxEmails first
     const fromInbox = inboxEmails.find((item) => item.id === selectedId);
     if (fromInbox) {
-      setEmailContent(fromInbox.content);
-      setSenderEmail(fromInbox.sender);
+      setEmailContent(fromInbox.content || '');
+      setSender(fromInbox.sender || '');
       setEmailSubject(fromInbox.subject || '');
-      setAlert(null);
-      runEmailScan(fromInbox.content, fromInbox.sender, fromInbox.subject);
       return;
     }
 
     // Check presets
     const found = EMAIL_PRESETS.find((p) => p.id === selectedId);
     if (found) {
-      setEmailContent(found.content);
-      setSenderEmail(found.sender);
+      setEmailContent(found.content || '');
+      setSender(found.sender || '');
       setEmailSubject(found.subject || '');
-      setAlert(null);
-      runEmailScan(found.content, found.sender, found.subject);
     }
   };
 
@@ -375,15 +398,12 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
       }
 
       if (res.emails && res.emails.length > 0) {
-        setSelectedPresetId(res.emails[0].id);
-        setEmailContent(res.emails[0].content);
-        setSenderEmail(res.emails[0].sender);
-        setEmailSubject(res.emails[0].subject || '');
+        setAnalysisResult(null);
+        setAnalysisError('');
         setAlert({
           type: 'success',
-          message: `Inbox connected for ${res.email}! Loaded ${res.emails.length} recent emails. Analysing latest email below...`,
+          message: `Inbox connected for ${res.email}! Loaded ${res.emails.length} recent emails. Select an email from the dropdown or paste email content to analyse.`,
         });
-        runEmailScan(res.emails[0].content, res.emails[0].sender, res.emails[0].subject);
       } else {
         setAlert({
           type: 'info',
@@ -484,15 +504,12 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
         setInboxEmails(emails);
         setIsGoogleConnected(true);
         if (email) setConnectedGmailEmail(email);
-        setSelectedPresetId(emails[0].id);
-        setEmailContent(emails[0].content);
-        setSenderEmail(emails[0].sender);
-        setEmailSubject(emails[0].subject || '');
+        setAnalysisResult(null);
+        setAnalysisError('');
         setAlert({
           type: 'success',
-          message: `Gmail successfully connected${email ? ` (${email})` : ''}! Loaded ${emails.length} recent inbox emails. Analysing latest email below...`,
+          message: `Gmail successfully connected${email ? ` (${email})` : ''}! Loaded ${emails.length} recent inbox emails. Select an email from the dropdown or paste email content to analyse.`,
         });
-        runEmailScan(emails[0].content, emails[0].sender, emails[0].subject);
       } else {
         setIsGoogleConnected(true);
         if (email) setConnectedGmailEmail(email);
@@ -515,7 +532,7 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
         await handleDirectEmailConnect(targetEmail);
         setAlert({
           type: 'warning',
-          message: `Google popup dialog was restricted by browser settings. Connected via DataRaksha direct email inbox (${targetEmail}). Analysing email below...`,
+          message: `Google popup dialog was restricted by browser settings. Connected via DataRaksha direct email inbox (${targetEmail}). Review the content below and click "Analyse Email" to start analysis.`,
         });
         return;
       } catch (fbErr) {
@@ -537,9 +554,10 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
       setInboxEmails([]);
       setSelectedPresetId('');
       setEmailContent('');
-      setSenderEmail('');
+      setSender('');
       setEmailSubject('');
-      setResult(null);
+      setAnalysisResult(null);
+      setAnalysisError('');
       setAlert({
         type: 'info',
         message: 'Gmail account disconnected. You can reconnect any time.',
@@ -552,23 +570,13 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
     }
   };
 
-  const handleScanEmail = async () => {
-    if (!emailContent.trim()) {
-      setAlert({
-        type: 'warning',
-        message: 'Please select an email or paste email content to analyze.',
-      });
-      return;
-    }
-    await runEmailScan(emailContent, senderEmail, emailSubject);
-  };
-
   const handleClear = () => {
     setEmailContent('');
-    setSenderEmail('');
+    setSender('');
     setEmailSubject('');
     setSelectedPresetId('');
-    setResult(null);
+    setAnalysisResult(null);
+    setAnalysisError('');
     setAlert(null);
   };
 
@@ -590,6 +598,14 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
           Analyse your emails for potential threats and get AI-powered insights.
         </p>
       </div>
+
+      {analysisError && (
+        <Alert
+          type="error"
+          message={analysisError}
+          onClose={() => setAnalysisError('')}
+        />
+      )}
 
       {alert && (
         <Alert
@@ -753,25 +769,28 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
             </div>
           </div>
 
-          {/* Card 2: Or Select an Email / Paste Card */}
+          {/* Card 2: Email Content Editor / Paste / Preset Card */}
           <div className="select-email-card card">
             <div className="card-section-header">
-              <h3 className="section-title-sm">Or Select an Email</h3>
+              <h3 className="section-title-sm">Email Content & Manual Entry</h3>
               <p className="section-desc-sm">
-                Choose an email from your inbox to analyse, or paste the content directly.
+                Choose an email from your inbox, select a threat scenario, or paste/type any email content manually.
               </p>
             </div>
 
             {/* Email Dropdown Selector */}
             <div className="email-select-container">
+              <label htmlFor="email-inbox-dropdown" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary, #475569)', marginBottom: '0.35rem' }}>
+                Select an email or threat scenario
+              </label>
               <select
                 id="email-inbox-dropdown"
                 className="email-dropdown-input"
                 value={selectedPresetId}
                 onChange={handleSelectPreset}
-                aria-label="Select an email from inbox"
+                aria-label="Select an email or threat scenario"
               >
-                <option value="">Select an email to analyse...</option>
+                <option value="">Select an email or threat scenario</option>
                 {inboxEmails.length > 0 && (
                   <optgroup label={`📬 Inbox Emails (${connectedGmailEmail || 'Connected Account'})`}>
                     {inboxEmails.map((item) => (
@@ -791,95 +810,89 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
               </select>
             </div>
 
-            {/* Content Display / Input State */}
-            {!emailContent ? (
-              <div className="no-email-placeholder" id="no-email-state">
-                <div className="placeholder-circle-icon">
-                  <Mail size={28} className="text-blue" />
-                </div>
-                <h4 className="placeholder-title">No email selected</h4>
-                <p className="placeholder-desc">
-                  Connect your Gmail or select an email to get started.
-                </p>
-                <div className="placeholder-actions">
+            {/* Email Content Editor (Always accessible for editing, pasting, or reviewing selected email) */}
+            <div className="email-content-editor" id="email-content-editor" style={{ marginTop: '0.85rem' }}>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <label htmlFor="email-content-textarea" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Enter Email Manually / Paste Email Content
+                </label>
+              </div>
+
+              <textarea
+                id="email-content-textarea"
+                name="emailContent"
+                className="textarea-field email-textarea"
+                value={emailContent}
+                onChange={(e) => {
+                  setEmailContent(e.target.value);
+                  setAnalysisResult(null);
+                  setAnalysisError('');
+                  if (alert?.type === 'warning' || alert?.type === 'error') {
+                    setAlert(null);
+                  }
+                }}
+                placeholder="Paste or type email content here..."
+                rows={8}
+                style={{
+                  minHeight: '160px',
+                  width: '100%',
+                  resize: 'vertical',
+                  pointerEvents: 'auto',
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+                readOnly={false}
+                disabled={false}
+                spellCheck="true"
+                aria-label="Email content to analyse"
+              />
+
+              <div className="editor-controls-bar">
+                <span className="char-count">
+                  {emailContent.length.toLocaleString()} characters
+                </span>
+                <div className="editor-buttons">
                   <button
                     type="button"
-                    className="btn btn-secondary action-sm"
-                    onClick={() => {
-                      setSelectedPresetId('bank-kyc');
-                      setEmailContent(EMAIL_PRESETS[0].content);
-                      setSenderEmail(EMAIL_PRESETS[0].sender);
-                      setEmailSubject(EMAIL_PRESETS[0].subject);
-                    }}
+                    id="clear-email-btn"
+                    className="btn btn-ghost action-sm"
+                    onClick={handleClear}
+                    disabled={isAnalyzing}
                   >
-                    <Sparkles size={14} /> Try Phishing Sample
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    id="analyse-email-btn"
+                    className="btn btn-primary"
+                    onClick={handleAnalyseEmail}
+                    disabled={isAnalyzing || !isOnline}
+                    title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Email'}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <div className="spinner sm" /> Analysing Email...
+                      </>
+                    ) : !isOnline ? (
+                      <>
+                        <Shield size={16} /> Offline (No Connection)
+                      </>
+                    ) : (
+                      <>
+                        <Shield size={16} /> Analyse Email
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="email-content-editor">
-                {senderEmail && (
-                  <div className="sender-indicator">
-                    <span className="sender-label">Sender:</span>
-                    <code className="sender-address">{senderEmail}</code>
-                  </div>
-                )}
-
-                <textarea
-                  id="email-content-textarea"
-                  className="textarea-field email-textarea"
-                  value={emailContent}
-                  onChange={(e) => setEmailContent(e.target.value)}
-                  placeholder="Paste email or message text here..."
-                  rows={6}
-                />
-
-                <div className="editor-controls-bar">
-                  <span className="char-count">
-                    {emailContent.length.toLocaleString()} characters
-                  </span>
-                  <div className="editor-buttons">
-                    <button
-                      type="button"
-                      className="btn btn-ghost action-sm"
-                      onClick={handleClear}
-                      disabled={isLoading}
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="button"
-                      id="analyse-email-btn"
-                      className="btn btn-primary"
-                      onClick={handleScanEmail}
-                      disabled={isLoading || !isOnline}
-                      title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Email'}
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="spinner sm" /> Analysing with Gemini...
-                        </>
-                      ) : !isOnline ? (
-                        <>
-                          <Shield size={16} /> Offline (No Connection)
-                        </>
-                      ) : (
-                        <>
-                          <Shield size={16} /> Analyse Email
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Result Card: Rendered immediately upon analysis */}
-          {result && (
+          {/* Result Card: Rendered only after explicit analysis completes successfully */}
+          {analysisResult && (
             <div className="email-result-wrapper" ref={resultRef}>
               <ResultCard
-                report={result}
+                report={analysisResult}
                 onDraftLetter={onNavigateToLetters}
               />
             </div>
