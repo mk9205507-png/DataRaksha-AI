@@ -104,11 +104,12 @@ Implement the core detection microservices and RESTful API endpoints for DataRak
 ---
 ---
 
-## 🎨 Issue 2: Frontend Implementation (Assignee: @kalyani)
+## 🎨 Issue 2: Frontend Implementation (Assignee: @kalyani) [CLOSED]
 
 **Title**: `[Phase 1 - Frontend] Core Threat Scanner UI & Backend API Integration (ScannerTabs, InputCard, ResultCard)`  
 **Labels**: `frontend`, `react`, `phase-1`, `ui/ux`, `mvp`  
 **Assignee**: Kalyani  
+**Status**: Closed (Completed)  
 **Milestone**: Phase 1: Core AI & Threat Detection Engines  
 
 ### 📝 Description
@@ -119,50 +120,50 @@ Build and finalize the user interface and API integration for the three Phase 1 
 ### 🎯 Key Deliverables & Modules
 
 #### 1. Scanner Tabs & Input Component (`ScannerTabs`, `InputBox`)
-- [ ] Enable smooth switching between the 3 core scan types:
+- [x] Enable smooth switching between the 3 core scan types:
   1. **Message / Email** (Placeholder: Paste SMS, email, or chat message)
   2. **Link / URL** (Placeholder: Enter web address e.g., https://example.com)
   3. **Privacy Policy** (Placeholder: Paste terms of service or privacy policy text)
-- [ ] Implement live character counter with visual warning approaching 20,000 characters.
-- [ ] Implement pre-scan client-side validation:
+- [x] Implement live character counter with visual warning approaching 20,000 characters.
+- [x] Implement pre-scan client-side validation:
   - Check for non-empty text.
   - Basic URL formatting check before submission on Link tab.
-- [ ] Provide one-click sample loader for testing each of the 3 scan types.
+- [x] Provide one-click sample loader for testing each of the 3 scan types.
 
 #### 2. Backend API Integration (`services/api.js`)
-- [ ] Replace temporary mock logic with actual HTTP calls to Phase 1 backend endpoints:
+- [x] Replace temporary mock logic with actual HTTP calls to Phase 1 backend endpoints:
   - Message: `POST /api/v1/scan/message` with `{ "content": text }`
   - Link: `POST /api/v1/scan/link` with `{ "url": url }`
   - Policy: `POST /api/v1/scan/policy` with `{ "policy_text": text }`
-- [ ] Manage loading states: show animated spinner / scanning skeleton while API processes request.
+- [x] Manage loading states: show animated spinner / scanning skeleton while API processes request.
 
 #### 3. Risk Results Visualization (`ResultCard`)
-- [ ] Display Risk Level with color-coded badges and risk score meter:
+- [x] Display Risk Level with color-coded badges and risk score meter:
   - 🟢 **Low Risk** (Score 0–39): Green badge (`#10B981`)
   - 🟡 **Medium Risk** (Score 40–69): Amber badge (`#F59E0B`)
   - 🔴 **High Risk** (Score 70–100): Crimson badge (`#EF4444`)
-- [ ] Plain-language summary banner.
-- [ ] **Detected Threats** chip list / tags.
-- [ ] **Exposed PII** breakdown section (highlighting sensitive tokens detected).
-- [ ] **Actionable Recommendations** numbered or bulleted list.
-- [ ] Prominent display of the **Mandatory Safety Disclaimer**:
+- [x] Plain-language summary banner.
+- [x] **Detected Threats** chip list / tags.
+- [x] **Exposed PII** breakdown section (highlighting sensitive tokens detected).
+- [x] **Actionable Recommendations** numbered or bulleted list.
+- [x] Prominent display of the **Mandatory Safety Disclaimer**:
   > *"No obvious risks were detected; however, this does not guarantee the content is completely safe. Always exercise caution when sharing sensitive information online."*
 
 #### 4. Error Handling & Edge Case User Feedback
-- [ ] Display user-friendly banner/toast notifications for HTTP errors:
+- [x] Display user-friendly banner/toast notifications for HTTP errors:
   - `400`: *"Please enter text or a URL to analyze."*
   - `422`: *"Please enter a valid web address (e.g., https://example.com)."*
   - `413`: *"Content exceeds the maximum limit of 20,000 characters."*
   - `503`: *"Threat analysis service is temporarily unavailable. Please try again shortly."*
   - `429`: *"Rate limit reached. Please wait a few moments before trying again."*
-- [ ] Graceful retry button if request fails.
+- [x] Graceful retry button if request fails.
 
 ---
 
 ### ✅ Acceptance Criteria
-- [ ] Seamless tab switching between Message, URL, and Policy scan modes.
-- [ ] Input field blocks submission and alerts when empty or exceeding 20,000 chars.
-- [ ] Correct API payloads dispatched based on the active tab.
-- [ ] Result card properly parses and renders risk score, badges, detected threats, PII, recommendations, and disclaimer.
-- [ ] Friendly UI error alerts shown for all backend HTTP error responses.
-- [ ] Fully responsive on mobile, tablet, and desktop viewports.
+- [x] Seamless tab switching between Message, URL, and Policy scan modes.
+- [x] Input field blocks submission and alerts when empty or exceeding 20,000 chars.
+- [x] Correct API payloads dispatched based on the active tab.
+- [x] Result card properly parses and renders risk score, badges, detected threats, PII, recommendations, and disclaimer.
+- [x] Friendly UI error alerts shown for all backend HTTP error responses.
+- [x] Fully responsive on mobile, tablet, and desktop viewports.

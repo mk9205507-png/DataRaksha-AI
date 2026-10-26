@@ -26,7 +26,7 @@ export const Sidebar = ({
   setIsCollapsed,
   onCloseMobile,
 }) => {
-  const { user, isAdmin, isAuthenticated, logout } = useAuth();
+  const { user, isAdmin, isAuthenticated, isLoading, logout } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   // Core navigation items
@@ -41,7 +41,16 @@ export const Sidebar = ({
   // Secondary tools
   const extraItems = [
     { id: 'letters', label: 'Statutory Letters', icon: FileCode, tooltip: 'DPDP & GDPR Deletion Notices' },
-    ...(isAdmin ? [{ id: 'admin', label: 'Admin Portal', icon: ShieldAlert, tooltip: 'Restricted Oversight' }] : []),
+    ...(!isLoading && isAuthenticated && isAdmin
+      ? [
+          {
+            id: 'admin',
+            label: 'Admin Portal',
+            icon: ShieldAlert,
+            tooltip: 'Platform Oversight & Threat Telemetry',
+          },
+        ]
+      : []),
   ];
 
   const handleNavClick = (tabId) => {
@@ -62,12 +71,29 @@ export const Sidebar = ({
     }
   };
 
-  const displayName =
-    user?.displayName ||
-    user?.full_name ||
-    user?.name ||
-    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
-    (isAuthenticated ? 'User' : 'Guest');
+  const displayName = (() => {
+    const metaName = user?.user_metadata?.full_name || user?.user_metadata?.name;
+    if (metaName && metaName.trim() && metaName.trim().toLowerCase() !== 'nisha') {
+      return metaName.trim();
+    }
+    if (user?.full_name && user.full_name.trim() && user.full_name.trim().toLowerCase() !== 'nisha') {
+      return user.full_name.trim();
+    }
+    if (user?.displayName && user.displayName.trim() && user.displayName.trim().toLowerCase() !== 'nisha') {
+      return user.displayName.trim();
+    }
+    if (user?.email) {
+      const prefix = user.email.split('@')[0];
+      const formatted = prefix
+        .replace(/[._\-+0-9]/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ');
+      return formatted || prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    return isAuthenticated ? 'User' : 'Guest';
+  })();
   const initial = (displayName.charAt(0) || 'U').toUpperCase();
 
   return (

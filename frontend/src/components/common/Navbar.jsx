@@ -3,7 +3,7 @@ import { Shield, FileText, History, BarChart3, User, LogOut, Menu, X, Sparkles }
 import { useAuth } from '../../context/AuthContext';
 
 export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
-  const { user, isAdmin, isAuthenticated, logout } = useAuth();
+  const { user, isAdmin, isAuthenticated, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Core navigation tabs - Admin Portal is conditionally exposed strictly to admin role
@@ -13,7 +13,7 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuth }) => {
     { id: 'history', label: 'Scan History', icon: History },
   ];
 
-  const navItems = isAdmin
+  const navItems = (!isLoading && isAuthenticated && isAdmin)
     ? [...baseNavItems, { id: 'admin', label: 'Admin Portal', icon: BarChart3 }]
     : baseNavItems;
 

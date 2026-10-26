@@ -47,12 +47,13 @@ apiClient.interceptors.response.use(
     }
     if (error.response && error.response.status === 401) {
       const requestUrl = error.config?.url || '';
-      // Do not log out or kick user to login screen for auxiliary, health, or scan checks
+      // Do not log out or kick user to login screen for auxiliary, health, scan, or admin verification checks
       if (
         requestUrl.includes('/history') ||
         requestUrl.includes('/health') ||
         requestUrl.includes('/gmail/status') ||
-        requestUrl.includes('/scan/')
+        requestUrl.includes('/scan/') ||
+        requestUrl.includes('/admin/me')
       ) {
         return Promise.reject(error);
       }

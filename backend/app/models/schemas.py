@@ -204,6 +204,10 @@ class UserContext(BaseModel):
     role: str = "individual"
     created_at: Optional[str] = None
 
+    @property
+    def user_id(self) -> str:
+        return self.id
+
 
 class UserProfileResponse(BaseModel):
     id: str

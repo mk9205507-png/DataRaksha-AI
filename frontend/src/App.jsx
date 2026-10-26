@@ -77,13 +77,15 @@ function AppContent() {
       return;
     }
 
-    // Role-based protection: regular users cannot access admin
+    // When a normal user attempts to access /admin directly, deny access and redirect to dashboard
     if (targetTab === 'admin' && isAuthenticated && !isAdmin) {
       setGlobalAlert({
         type: 'warning',
-        message: 'Access denied: Administrator privileges required.',
+        message: 'Access Denied: Administrator privileges are required to view the Admin Portal.',
       });
-      targetTab = 'dashboard';
+      setActiveTab('dashboard');
+      window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
+      return;
     }
 
     setPreviousTab(activeTab);
@@ -139,10 +141,14 @@ function AppContent() {
       setAuthInitialMode('login');
       setActiveTab('auth');
       window.history.replaceState({ tab: 'auth', redirect: activeTab }, '', '#auth');
-    } else if (activeTab === 'admin' && isAuthenticated && !isAdmin) {
+      return;
+    }
+
+    // Automatically deny and redirect normal users trying to access /admin directly
+    if (activeTab === 'admin' && isAuthenticated && !isAdmin) {
       setGlobalAlert({
         type: 'warning',
-        message: 'Access denied: Administrator privileges required.',
+        message: 'Access Denied: Administrator privileges are required to view the Admin Portal.',
       });
       setActiveTab('dashboard');
       window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
@@ -164,6 +170,10 @@ function AppContent() {
         setActiveTab('auth');
         window.history.replaceState({ tab: 'auth', redirect: targetTab }, '', '#auth');
       } else if (targetTab === 'admin' && isAuthenticated && !isAdmin) {
+        setGlobalAlert({
+          type: 'warning',
+          message: 'Access Denied: Administrator privileges are required to view the Admin Portal.',
+        });
         setActiveTab('dashboard');
         window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
       } else {
@@ -335,6 +345,14 @@ function AppContent() {
         );
 
       case 'admin':
+        if (!isAdmin) {
+          return (
+            <DashboardPage
+              onNavigate={(tab) => navigateToTab(tab)}
+              onSelectActivity={(act) => handleReopenScan(act)}
+            />
+          );
+        }
         return (
           <AdminDashboard
             user={user}
