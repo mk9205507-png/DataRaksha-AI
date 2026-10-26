@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.models.schemas import HealthResponse
 from app.api.v1.router import api_v1_router
+from app.api.v1.endpoints import admin
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -26,6 +27,8 @@ app.add_middleware(
 
 # Central Route Registrations
 app.include_router(api_v1_router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api")
+app.include_router(admin.router, prefix="")
 
 
 @app.get(

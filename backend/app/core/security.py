@@ -177,19 +177,38 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserC
         )
 
     email = payload.get("email") or ""
+    clean_email = email.strip().lower()
 
-    # Derive user role: check app_metadata, user_metadata, direct claims, then Supabase profile
-    role = (
-        payload.get("app_metadata", {}).get("role")
-        or payload.get("user_metadata", {}).get("role")
-        or payload.get("role")
-    )
+    # Strictly secure role resolution:
+    # 1. Check server-side allowlist of Supabase user UUIDs from environment variables
+    admin_uuids = [
+        u.strip() for u in (getattr(settings, "ADMIN_USER_IDS", "") or "").split(",") if u.strip()
+    ]
+    is_allowlisted_uuid = str(user_id) in admin_uuids
 
-    if not role or role not in ("individual", "admin"):
-        # Query public.profiles in database if configured
-        profile = await supabase_service.get_user_profile(user_id)
-        if profile and profile.get("role"):
-            role = profile.get("role")
+    # 2. Check server-side allowlist of administrator emails from environment variables
+    admin_emails = [
+        e.strip().lower()
+        for e in (
+            (getattr(settings, "ADMIN_EMAILS", "") or "")
+            + ","
+            + (getattr(settings, "INITIAL_ADMIN_EMAILS", "mk9205507@gmail.com") or "")
+        ).split(",")
+        if e.strip()
+    ]
+    is_allowlisted_email = clean_email in admin_emails
+
+    # 3. Check server-only app_metadata claim (set only via service-role admin API; ignore user_metadata)
+    app_meta_role = payload.get("app_metadata", {}).get("role")
+    direct_role = payload.get("role") if payload.get("role") in ("admin", "individual") else None
+
+    if is_allowlisted_uuid or is_allowlisted_email or app_meta_role == "admin" or direct_role == "admin":
+        role = "admin"
+    else:
+        # 4. Authoritative database lookup in public.profiles
+        profile = await supabase_service.get_user_profile(str(user_id))
+        if profile and profile.get("role") == "admin":
+            role = "admin"
         else:
             role = "individual"
 

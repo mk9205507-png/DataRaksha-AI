@@ -16,11 +16,29 @@ import { historyService } from '../services/historyService';
 
 export const DashboardPage = ({ onNavigate, onSelectActivity }) => {
   const { user, isAuthenticated } = useAuth();
-  const displayName =
-    user?.displayName ||
-    user?.name ||
-    user?.full_name ||
-    (user?.email ? user.email.split('@')[0] : 'User');
+  const displayName = (() => {
+    const metaName = user?.user_metadata?.full_name || user?.user_metadata?.name;
+    if (metaName && metaName.trim() && metaName.trim().toLowerCase() !== 'nisha') {
+      return metaName.trim();
+    }
+    if (user?.full_name && user.full_name.trim() && user.full_name.trim().toLowerCase() !== 'nisha') {
+      return user.full_name.trim();
+    }
+    if (user?.displayName && user.displayName.trim() && user.displayName.trim().toLowerCase() !== 'nisha') {
+      return user.displayName.trim();
+    }
+    if (user?.email) {
+      const prefix = user.email.split('@')[0];
+      const formatted = prefix
+        .replace(/[._\-+0-9]/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ');
+      return formatted || prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    return 'User';
+  })();
 
   const [historyList, setHistoryList] = useState(() =>
     user?.id ? historyService.getStoredScans(user.id) : []

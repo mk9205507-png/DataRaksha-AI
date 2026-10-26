@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Supabase Auth & Database
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
     # Google OAuth 2.0 & Gmail API Settings
@@ -26,6 +27,11 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/gmail/callback"
     FRONTEND_URL: str = "http://localhost:5173"
     GMAIL_STATE_SECRET: str = "dataraksha-gmail-oauth-state-secret-key"
+
+    # Administrative Privileges Configuration (Allowlist UUIDs & Emails)
+    ADMIN_USER_IDS: str = ""
+    ADMIN_EMAILS: str = "mk9205507@gmail.com"
+    INITIAL_ADMIN_EMAILS: str = "mk9205507@gmail.com"
 
     # Pydantic v2 configuration
     model_config = SettingsConfigDict(

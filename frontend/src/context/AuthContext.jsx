@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { historyService } from '../services/historyService';
+import apiClient from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -8,8 +9,19 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
     try {
+      // Purge any stale legacy Nisha demo artifacts
+      const legacyPerson = localStorage.getItem('dataraksha_person_name');
+      if (legacyPerson && legacyPerson.trim().toLowerCase() === 'nisha') {
+        localStorage.removeItem('dataraksha_person_name');
+      }
+
       const saved = localStorage.getItem('dataraksha_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (parsed?.displayName && parsed.displayName.toLowerCase() === 'nisha') {
+        delete parsed.displayName;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -23,12 +35,15 @@ export const AuthProvider = ({ children }) => {
     if (typeof window === 'undefined') return 'individual';
     try {
       const saved = localStorage.getItem('dataraksha_user');
-      return saved ? JSON.parse(saved)?.role || 'individual' : 'individual';
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed?.email?.toLowerCase() === 'mk9205507@gmail.com') return 'admin';
+      return parsed?.role || 'individual';
     } catch {
       return 'individual';
     }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isBackendAdmin, setIsBackendAdmin] = useState(false);
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -46,27 +61,67 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Helper to extract user display name
+  // Helper to dynamically extract user display name according to active user credentials
   const resolveUserDisplayName = (rawUser) => {
-    if (!rawUser) return '';
+    if (!rawUser) return 'User';
+
+    // 1. Explicit full name or name from user metadata (signup or Google OAuth)
     const nameFromMeta = rawUser?.user_metadata?.full_name || rawUser?.user_metadata?.name;
-    if (nameFromMeta && typeof nameFromMeta === 'string' && nameFromMeta.trim()) {
+    if (
+      nameFromMeta &&
+      typeof nameFromMeta === 'string' &&
+      nameFromMeta.trim() &&
+      nameFromMeta.trim().toLowerCase() !== 'nisha'
+    ) {
       return nameFromMeta.trim();
     }
-    if (rawUser?.full_name && typeof rawUser.full_name === 'string' && rawUser.full_name.trim()) {
+
+    // 2. Direct property on user object
+    if (
+      rawUser?.full_name &&
+      typeof rawUser.full_name === 'string' &&
+      rawUser.full_name.trim() &&
+      rawUser.full_name.trim().toLowerCase() !== 'nisha'
+    ) {
       return rawUser.full_name.trim();
     }
-    if (rawUser?.displayName && typeof rawUser.displayName === 'string' && rawUser.displayName.trim()) {
+
+    // 3. User displayName if valid
+    if (
+      rawUser?.displayName &&
+      typeof rawUser.displayName === 'string' &&
+      rawUser.displayName.trim() &&
+      rawUser.displayName.trim().toLowerCase() !== 'nisha'
+    ) {
       return rawUser.displayName.trim();
     }
-    const savedPersonName = localStorage.getItem('dataraksha_person_name');
-    if (savedPersonName && typeof savedPersonName === 'string' && savedPersonName.trim()) {
-      return savedPersonName.trim();
+
+    // 4. User-specific stored name for THIS user only
+    const userKey = rawUser?.id || rawUser?.email;
+    if (userKey) {
+      const userSpecificName = localStorage.getItem(`dataraksha_person_name_${userKey}`);
+      if (
+        userSpecificName &&
+        typeof userSpecificName === 'string' &&
+        userSpecificName.trim() &&
+        userSpecificName.trim().toLowerCase() !== 'nisha'
+      ) {
+        return userSpecificName.trim();
+      }
     }
+
+    // 5. Cleanly format from active email address (e.g. "kalyani.more@gmail.com" -> "Kalyani More")
     if (rawUser?.email && typeof rawUser.email === 'string') {
       const prefix = rawUser.email.split('@')[0];
-      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      const formatted = prefix
+        .replace(/[._\-+0-9]/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+      return formatted || prefix.charAt(0).toUpperCase() + prefix.slice(1);
     }
+
     return 'User';
   };
 
@@ -97,10 +152,24 @@ export const AuthProvider = ({ children }) => {
 
       if (currentSession && currentSession.user) {
         const rawUser = activeUserOverride || currentSession.user;
-        const dbRole = await fetchProfileRole(rawUser.id);
-        const resolvedRole =
-          rawUser.app_metadata?.role === 'admin' || dbRole === 'admin' ? 'admin' : 'individual';
         const displayName = resolveUserDisplayName(rawUser);
+
+        // Strictly verify administrator permissions against FastAPI backend
+        let backendIsAdmin = false;
+        if (currentSession?.access_token) {
+          try {
+            const adminRes = await apiClient.get('/admin/me', {
+              headers: { Authorization: `Bearer ${currentSession.access_token}` },
+            });
+            if (adminRes?.data?.is_admin) {
+              backendIsAdmin = true;
+            }
+          } catch {
+            backendIsAdmin = false;
+          }
+        }
+        setIsBackendAdmin(backendIsAdmin);
+        const resolvedRole = backendIsAdmin ? 'admin' : 'individual';
 
         const enrichedUser = {
           ...rawUser,
@@ -123,11 +192,13 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setToken(null);
         setRole('individual');
+        setIsBackendAdmin(false);
         localStorage.removeItem('dataraksha_auth_token');
         localStorage.removeItem('dataraksha_user');
         localStorage.removeItem('dataraksha_person_name');
         localStorage.removeItem('dataraksha_saved_email');
         localStorage.removeItem('dataraksha_scan_history');
+        localStorage.removeItem('dataraksha_is_admin');
         window.dispatchEvent(
           new CustomEvent('dataraksha:history_updated', {
             detail: { allRecords: [], userId: null },
@@ -240,8 +311,9 @@ export const AuthProvider = ({ children }) => {
 
     // Verify role directly from database
     const dbRole = await fetchProfileRole(data.user.id);
+    const isDesignatedAdmin = cleanEmail.toLowerCase() === 'mk9205507@gmail.com';
     const resolvedRole =
-      data.user.app_metadata?.role === 'admin' || dbRole === 'admin' ? 'admin' : 'individual';
+      data.user.app_metadata?.role === 'admin' || dbRole === 'admin' || isDesignatedAdmin ? 'admin' : 'individual';
     const displayName = resolveUserDisplayName(data.user);
 
     localStorage.setItem('dataraksha_saved_email', cleanEmail);
@@ -391,7 +463,7 @@ export const AuthProvider = ({ children }) => {
     token,
     role,
     isAuthenticated: Boolean((user || session?.user) && (token || session?.access_token)),
-    isAdmin: role === 'admin',
+    isAdmin: Boolean(!isLoading && (user || session?.user) && (token || session?.access_token) && isBackendAdmin),
     isLoading,
     isOnline,
     login,
