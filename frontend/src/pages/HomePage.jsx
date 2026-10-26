@@ -4,44 +4,32 @@ import {
   Mail,
   Link2,
   FileText,
-  Bot,
   ArrowRight,
-  CheckCircle2,
-  Lock,
-  Zap,
-  ChevronRight,
-  Sparkles,
-  User,
   LogOut,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const HomePage = ({ onNavigate, onOpenAuth }) => {
   const { user, isAuthenticated, logout } = useAuth();
-  const displayName =
-    user?.displayName ||
-    user?.name ||
-    (isAuthenticated ? localStorage.getItem('dataraksha_person_name') : '') ||
-    '';
+  const displayName = user?.displayName || user?.name || 'User';
 
-  const handleProtectedNavigate = (targetTab = 'dashboard') => {
+  const handleGetStarted = () => {
     if (isAuthenticated) {
-      onNavigate(targetTab);
+      onNavigate('dashboard');
+    } else if (onOpenAuth) {
+      onOpenAuth('login', 'Sign in or create an account to start protecting your digital privacy.');
     } else {
-      if (onOpenAuth) {
-        onOpenAuth(targetTab, 'Please sign in to continue.');
-      } else {
-        onNavigate('auth');
-      }
+      onNavigate('auth');
     }
   };
 
   return (
-    <div className="landing-page" id="landing-home">
-      {/* Top Navigation Bar (Matching Reference Screen 1) */}
+    <div className="landing-page light-theme" id="landing-home">
+      {/* Top Navigation Bar */}
       <header className="landing-navbar">
         <div className="landing-nav-container">
-          {/* Brand Logo */}
+          {/* Logo & Brand */}
           <div className="landing-brand">
             <div className="landing-brand-icon">
               <Shield size={24} className="shield-icon" />
@@ -51,24 +39,23 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
 
           {/* Navigation Links */}
           <nav className="landing-nav-links">
-            <a href="#landing-home" className="landing-nav-link active">Home</a>
-            <a href="#features" className="landing-nav-link">Features</a>
-            <a href="#about" className="landing-nav-link">About</a>
+            <a href="#capabilities" className="landing-nav-link">Capabilities</a>
+            <a href="#footer" className="landing-nav-link">About</a>
           </nav>
 
-          {/* Auth Action Buttons with Sign Out */}
+          {/* Action Buttons */}
           <div className="landing-nav-actions">
             {isAuthenticated ? (
               <>
                 <button
                   type="button"
-                  id="landing-welcome-btn"
+                  id="landing-dashboard-btn"
                   className="btn btn-secondary landing-btn-signin"
                   onClick={() => onNavigate('dashboard')}
                   title="Open Dashboard"
                 >
-                  <User size={14} className="text-blue" />
-                  <span>Welcome, <strong>{displayName}</strong></span>
+                  <LayoutDashboard size={16} />
+                  <span>Dashboard ({displayName})</span>
                 </button>
                 <button
                   type="button"
@@ -76,230 +63,116 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
                   className="btn btn-ghost landing-btn-signout"
                   onClick={async () => {
                     await logout();
-                    if (onNavigate) onNavigate('home');
                   }}
                   title="Sign Out"
                 >
-                  <LogOut size={14} />
+                  <LogOut size={16} />
                   <span>Sign Out</span>
                 </button>
               </>
             ) : (
               <button
                 type="button"
-                id="landing-signin-btn"
-                className="btn btn-secondary landing-btn-signin"
-                onClick={() => (onOpenAuth ? onOpenAuth('dashboard') : onNavigate('auth'))}
+                id="landing-getstarted-btn"
+                className="btn btn-primary landing-btn-getstarted"
+                onClick={handleGetStarted}
               >
-                Sign In
+                Get Started
               </button>
             )}
-            <button
-              type="button"
-              id="landing-getstarted-btn"
-              className="btn btn-primary landing-btn-getstarted"
-              onClick={() => handleProtectedNavigate('dashboard')}
-            >
-              Get Started
-            </button>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
       <section className="landing-hero-section">
-        <div className="landing-hero-container">
-          {/* Left Hero Content */}
-          <div className="landing-hero-content">
+        <div className="landing-hero-container simple-hero">
+          <div className="landing-hero-content text-center max-w-2xl mx-auto">
             {/* Pill Badge */}
-            <div className="hero-pill-badge">
+            <div className="hero-pill-badge mx-auto">
               <span>AI-Powered Privacy & Digital Risk Protection</span>
             </div>
 
-            {/* Main Headline */}
+            {/* Exact Required Heading */}
             <h1 className="hero-headline">
-              Stay Safe in the<br />
-              <span className="hero-headline-highlight">Digital World</span>
+              Your Privacy. <span className="hero-headline-highlight">Our Priority.</span>
             </h1>
 
-            {/* Subtitle */}
+            {/* Exact Required Description */}
             <p className="hero-description">
-              DataRaksha AI helps you detect digital threats, analyse suspicious
-              content and protect your privacy with the power of AI.
+              Detect digital risks, understand privacy policies, and make safer decisions online with AI-powered analysis.
             </p>
-
-            {/* CTA Buttons */}
-            <div className="hero-cta-group">
-              <button
-                type="button"
-                id="hero-cta-getstarted"
-                className="btn btn-primary hero-btn-main"
-                onClick={() => handleProtectedNavigate('dashboard')}
-              >
-                <span>Get Started</span>
-              </button>
-              <a
-                href="#features"
-                className="btn btn-secondary hero-btn-sub"
-              >
-                <span>Learn More</span>
-              </a>
-            </div>
-
-            {/* Quick Feature Chips Row (Matching Reference) */}
-            <div className="hero-feature-chips">
-              <button
-                type="button"
-                className="feature-chip chip-email"
-                onClick={() => onNavigate('email')}
-                title="Open Email Safety Scanner"
-              >
-                <Mail size={16} className="chip-icon icon-email" />
-                <span>Email Safety</span>
-              </button>
-
-              <button
-                type="button"
-                className="feature-chip chip-url"
-                onClick={() => onNavigate('url')}
-                title="Open URL Security Scanner"
-              >
-                <Link2 size={16} className="chip-icon icon-url" />
-                <span>URL Security</span>
-              </button>
-
-              <button
-                type="button"
-                className="feature-chip chip-policy"
-                onClick={() => onNavigate('policy')}
-                title="Open Privacy Policy Simplifier"
-              >
-                <FileText size={16} className="chip-icon icon-policy" />
-                <span>Privacy Policy</span>
-              </button>
-
-              <button
-                type="button"
-                className="feature-chip chip-ai"
-                onClick={() => handleProtectedNavigate('dashboard')}
-                title="View AI Threat Dashboard"
-              >
-                <Bot size={16} className="chip-icon icon-ai" />
-                <span>AI Analysis</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right Hero Graphic / Illustration (Matching Reference Screen 1) */}
-          <div className="landing-hero-graphic" aria-hidden="true">
-            <div className="graphic-backdrop-cloud"></div>
-
-            {/* Floating Card: Email Icon */}
-            <div className="floating-card float-mail">
-              <div className="float-icon-box mail-box">
-                <Mail size={22} />
-              </div>
-            </div>
-
-            {/* Floating Card: URL Link Chain */}
-            <div className="floating-card float-link">
-              <div className="float-icon-box link-box">
-                <Link2 size={22} />
-              </div>
-            </div>
-
-            {/* Floating Card: Privacy Policy Document */}
-            <div className="floating-card float-doc">
-              <div className="float-icon-box doc-box">
-                <FileText size={22} />
-              </div>
-            </div>
-
-            {/* Center Laptop Illustration with Shield & Lock */}
-            <div className="laptop-illustration">
-              <div className="laptop-screen">
-                <div className="screen-inner-display">
-                  <div className="screen-shield-badge">
-                    <Shield size={54} className="screen-shield-icon" />
-                    <Lock size={20} className="screen-lock-icon" />
-                  </div>
-                  <div className="screen-glow-ring"></div>
-                </div>
-              </div>
-              <div className="laptop-base">
-                <div className="laptop-notch"></div>
-              </div>
-              <div className="laptop-shadow"></div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* Features Overview Section */}
-      <section className="landing-features-section" id="features">
+      {/* Small Section: Three Capabilities */}
+      <section className="landing-capabilities-section" id="capabilities">
         <div className="landing-section-container">
           <div className="section-header text-center">
-            <span className="section-eyebrow">Enterprise-Grade Protection</span>
-            <h2 className="section-title">Comprehensive AI Safety Modules</h2>
+            <h2 className="section-title">Core Security Capabilities</h2>
             <p className="section-desc">
-              Protect your digital presence against deceptive phishing campaigns, predatory policies, and malicious links.
+              Three essential tools designed to safeguard your online identity and personal information.
             </p>
           </div>
 
-          <div className="features-grid">
+          <div className="capabilities-grid">
+            {/* Capability 1: Email Security */}
             <div
-              className="feature-card card"
-              onClick={() => onNavigate('email')}
+              className="capability-card card"
+              onClick={handleGetStarted}
               role="button"
               tabIndex={0}
             >
-              <div className="feature-card-icon icon-email-bg">
+              <div className="capability-icon-box icon-email-bg">
                 <Mail size={26} className="text-blue" />
               </div>
-              <h3 className="feature-card-title">Email & Message Safety</h3>
-              <p className="feature-card-text">
-                Detect phishing tactics, high-pressure urgency cues, and exposed sensitive PII before clicking or responding.
+              <h3 className="capability-card-title">Email Security</h3>
+              <p className="capability-card-text">
+                Scan suspicious messages and emails for phishing tactics, urgent coercion cues, and exposed sensitive personal identifiers before clicking.
               </p>
-              <div className="feature-card-link">
-                <span>Scan Email Now</span>
+              <div className="capability-card-link">
+                <span>Explore Email Security</span>
                 <ArrowRight size={16} />
               </div>
             </div>
 
+            {/* Capability 2: URL Security */}
             <div
-              className="feature-card card"
-              onClick={() => onNavigate('url')}
+              className="capability-card card"
+              onClick={handleGetStarted}
               role="button"
               tabIndex={0}
             >
-              <div className="feature-card-icon icon-url-bg">
+              <div className="capability-icon-box icon-url-bg">
                 <Link2 size={26} className="text-cyan" />
               </div>
-              <h3 className="feature-card-title">URL Security Inspector</h3>
-              <p className="feature-card-text">
-                Scan suspicious links and domains against Google Safe Browsing threat feeds to prevent credential theft.
+              <h3 className="capability-card-title">URL Security</h3>
+              <p className="capability-card-text">
+                Verify suspicious web links and domains against real-time threat intelligence feeds to protect against malicious websites and credential theft.
               </p>
-              <div className="feature-card-link">
-                <span>Check Website</span>
+              <div className="capability-card-link">
+                <span>Explore URL Security</span>
                 <ArrowRight size={16} />
               </div>
             </div>
 
+            {/* Capability 3: Privacy Policy Analysis */}
             <div
-              className="feature-card card"
-              onClick={() => onNavigate('policy')}
+              className="capability-card card"
+              onClick={handleGetStarted}
               role="button"
               tabIndex={0}
             >
-              <div className="feature-card-icon icon-policy-bg">
+              <div className="capability-icon-box icon-policy-bg">
                 <FileText size={26} className="text-indigo" />
               </div>
-              <h3 className="feature-card-title">Privacy Policy Simplifier</h3>
-              <p className="feature-card-text">
-                Demystify lengthy legal policies into plain language summaries, uncover data-broker sharing, and enforce DPDP rights.
+              <h3 className="capability-card-title">Privacy Policy Analysis</h3>
+              <p className="capability-card-text">
+                Translate dense terms and privacy policies into clear, plain language summaries to uncover third-party data selling, continuous telemetry, and statutory rights.
               </p>
-              <div className="feature-card-link">
-                <span>Simplify Policy</span>
+              <div className="capability-card-link">
+                <span>Explore Policy Analysis</span>
                 <ArrowRight size={16} />
               </div>
             </div>
@@ -307,55 +180,8 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
         </div>
       </section>
 
-      {/* About Section */}
-      <section className="landing-about-section" id="about">
-        <div className="landing-section-container">
-          <div className="about-banner card">
-            <div className="about-banner-content">
-              <div className="about-badge">
-                <Sparkles size={16} />
-                <span>Built for Everyday Users & Organizations</span>
-              </div>
-              <h2 className="about-title">Why Trust DataRaksha AI?</h2>
-              <div className="about-points">
-                <div className="about-point">
-                  <CheckCircle2 size={20} className="point-icon" />
-                  <div>
-                    <strong>Zero-Log Retention Architecture</strong>
-                    <p>Scanned messages and links are analyzed in ephemeral memory and never sold or persisted without consent.</p>
-                  </div>
-                </div>
-                <div className="about-point">
-                  <CheckCircle2 size={20} className="point-icon" />
-                  <div>
-                    <strong>Statutory Rights Ready (DPDP Act 2023 & GDPR)</strong>
-                    <p>Generate legally compliant data erasure and access request notices directly from policy scan findings.</p>
-                  </div>
-                </div>
-                <div className="about-point">
-                  <CheckCircle2 size={20} className="point-icon" />
-                  <div>
-                    <strong>Real-time AI Heuristics</strong>
-                    <p>Sub-second threat classification powered by Google Gemini AI and threat pattern matching.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="about-banner-action">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => handleProtectedNavigate('dashboard')}
-              >
-                Explore Live Dashboard <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="landing-footer">
+      {/* Clean Footer */}
+      <footer className="landing-footer" id="footer">
         <div className="landing-footer-container">
           <div className="footer-left">
             <div className="landing-brand">
@@ -364,18 +190,12 @@ export const HomePage = ({ onNavigate, onOpenAuth }) => {
               </div>
               <span className="landing-brand-title">DataRaksha AI</span>
             </div>
-            <p className="footer-copy">© 2026 DataRaksha AI. Empowering digital privacy & safety.</p>
+            <p className="footer-copy">
+              © {new Date().getFullYear()} DataRaksha AI. Empowering digital privacy & risk protection.
+            </p>
           </div>
           <div className="footer-links">
-            <a href="#features">Features</a>
-            <a href="#about">About</a>
-            <button
-              type="button"
-              className="footer-link-btn"
-              onClick={() => (onOpenAuth ? onOpenAuth('dashboard') : onNavigate('auth'))}
-            >
-              Sign In
-            </button>
+            <a href="#capabilities">Capabilities</a>
           </div>
         </div>
       </footer>

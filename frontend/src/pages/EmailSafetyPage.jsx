@@ -61,7 +61,7 @@ const EMAIL_PRESETS = [
 ];
 
 export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAuth, initialData }) => {
-  const { isAuthenticated, user, loginWithGoogle } = useAuth();
+  const { isAuthenticated, user, loginWithGoogle, isOnline } = useAuth();
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [emailContent, setEmailContent] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
@@ -214,6 +214,14 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
   const runEmailScan = async (contentToScan, sender = '', subject = '') => {
     if (!contentToScan || !contentToScan.trim()) return;
 
+    if (!navigator.onLine || isOnline === false) {
+      setAlert({
+        type: 'warning',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setAlert(null);
 
@@ -234,11 +242,12 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
           preview: contentToScan,
           result: data,
           target_company: sender || 'Gmail Inbox',
+          userId: user?.id,
         });
         return;
       }
 
-      // For sample threat scenarios or pasted content, use core message scanner (with client-side fallback)
+      // For sample threat scenarios or pasted content, use core message scanner
       const data = await scanService.scanMessage(contentToScan);
       setResult(data);
       historyService.saveScanRecord({
@@ -246,9 +255,10 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
         preview: contentToScan,
         result: data,
         target_company: sender || 'Email Communication',
+        userId: user?.id,
       });
     } catch (err) {
-      console.warn('Dedicated email scan failed, falling back to general message scanner:', err);
+      console.warn('Dedicated email scan failed, attempting message scanner:', err);
       try {
         const fallbackData = await scanService.scanMessage(contentToScan);
         setResult(fallbackData);
@@ -257,11 +267,27 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
           preview: contentToScan,
           result: fallbackData,
           target_company: sender || 'Email Communication',
+          userId: user?.id,
         });
       } catch (fallbackErr) {
+        const errMsg =
+          fallbackErr.friendlyMessage ||
+          fallbackErr.response?.data?.detail ||
+          fallbackErr.message ||
+          'Failed to complete email threat scan. Please try again.';
+
         setAlert({
           type: 'error',
-          message: fallbackErr.friendlyMessage || fallbackErr.response?.data?.detail || fallbackErr.message || 'Failed to complete email threat scan. Please try again.',
+          message: errMsg,
+          action: (
+            <button
+              type="button"
+              className="btn btn-secondary action-sm"
+              onClick={() => runEmailScan(contentToScan, sender, subject)}
+            >
+              Retry
+            </button>
+          ),
         });
       }
     } finally {
@@ -826,11 +852,16 @@ export const EmailSafetyPage = ({ onNavigateBack, onNavigateToLetters, onOpenAut
                       id="analyse-email-btn"
                       className="btn btn-primary"
                       onClick={handleScanEmail}
-                      disabled={isLoading}
+                      disabled={isLoading || !isOnline}
+                      title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Email'}
                     >
                       {isLoading ? (
                         <>
                           <div className="spinner sm" /> Analysing with Gemini...
+                        </>
+                      ) : !isOnline ? (
+                        <>
+                          <Shield size={16} /> Offline (No Connection)
                         </>
                       ) : (
                         <>

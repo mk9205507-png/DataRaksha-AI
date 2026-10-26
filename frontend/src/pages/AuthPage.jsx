@@ -11,8 +11,7 @@ import {
   AlertCircle,
   KeyRound,
   ShieldCheck,
-  Sparkles,
-  RotateCcw,
+  WifiOff,
 } from 'lucide-react';
 import Alert from '../components/common/Alert';
 import { useAuth } from '../context/AuthContext';
@@ -22,14 +21,13 @@ export const AuthPage = ({
   initialMessage = '',
   initialMode = 'login',
 }) => {
-  const { login, signup, resetPassword, loginWithGoogle } = useAuth();
+  const { login, signup, resetPassword, isOnline } = useAuth();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState(initialMode);
 
-  // Check if user has signed in before
+  // Saved email from prior sessions
   const savedEmail = localStorage.getItem('dataraksha_saved_email') || '';
-  const savedName = localStorage.getItem('dataraksha_person_name') || '';
 
   // ---------------------------------------------------------------------------
   // Login Form State
@@ -39,7 +37,6 @@ export const AuthPage = ({
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginErrors, setLoginErrors] = useState({});
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Register Form State
@@ -112,9 +109,8 @@ export const AuthPage = ({
       errors.email = 'Please enter a valid email address (e.g. name@example.com).';
     }
 
-    // Password is fully flexible to ensure any user can sign in smoothly
-    if (loginPassword && !loginPassword.trim()) {
-      errors.password = 'Password cannot contain only spaces.';
+    if (!loginPassword) {
+      errors.password = 'Password is required.';
     }
 
     setLoginErrors(errors);
@@ -125,11 +121,15 @@ export const AuthPage = ({
     if (e) e.preventDefault();
     setAlert(null);
 
-    if (!validateLogin()) {
+    if (!isOnline) {
       setAlert({
         type: 'error',
-        message: '✗ Sign in failed. Please check your email and password.',
+        message: 'No internet connection. Please check your network and try again.',
       });
+      return;
+    }
+
+    if (!validateLogin()) {
       return;
     }
 
@@ -139,37 +139,23 @@ export const AuthPage = ({
       const cleanEmail = loginEmail.trim();
       const result = await login({
         email: cleanEmail,
-        password: loginPassword || 'DataRaksha@2026',
+        password: loginPassword,
       });
 
-      setLoginSuccess(true);
       setAlert({
         type: 'success',
-        message: 'Authentication successful! Welcome to your security shield.',
-        action: (
-          <button
-            type="button"
-            className="alert-action-btn"
-            id="alert-go-to-dashboard-btn"
-            onClick={() => {
-              if (onAuthSuccess) onAuthSuccess(result.user);
-            }}
-          >
-            Go to Dashboard &rarr;
-          </button>
-        ),
+        message: 'Sign in successful! Redirecting...',
       });
 
-      // Keep success message visible and auto-redirect to dashboard
       setTimeout(() => {
         if (onAuthSuccess) {
-          onAuthSuccess(result.user);
+          onAuthSuccess(result.user, result.role);
         }
-      }, 700);
+      }, 500);
     } catch (err) {
       setAlert({
         type: 'error',
-        message: '✗ Sign in failed. Please check your email and password.',
+        message: err.message || 'Sign in failed. Please check your credentials.',
       });
     } finally {
       setIsLoggingIn(false);
@@ -196,8 +182,6 @@ export const AuthPage = ({
 
     if (!regPassword) {
       errors.password = 'Password is required.';
-    } else if (!regPassword.trim()) {
-      errors.password = 'Password cannot contain only spaces.';
     } else if (regPassword.length < 8) {
       errors.password = 'Password must be at least 8 characters long.';
     } else {
@@ -222,6 +206,14 @@ export const AuthPage = ({
     if (e) e.preventDefault();
     setAlert(null);
 
+    if (!isOnline) {
+      setAlert({
+        type: 'error',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     if (!validateRegistration()) {
       return;
     }
@@ -236,19 +228,27 @@ export const AuthPage = ({
         fullName: cleanName,
         email: cleanEmail,
         password: regPassword,
-        role: cleanEmail.includes('admin') ? 'admin' : 'individual',
       });
 
-      setAlert({
-        type: 'success',
-        message: 'Account registered successfully! Welcome to DataRaksha AI.',
-      });
-
-      setTimeout(() => {
-        if (onAuthSuccess) {
-          onAuthSuccess(result.user);
-        }
-      }, 700);
+      if (result.requiresEmailVerification) {
+        setAlert({
+          type: 'info',
+          message:
+            '✓ Account created! A confirmation link has been sent to your email. Please verify your email, then sign in.',
+        });
+        setAuthMode('login');
+        setLoginEmail(cleanEmail);
+      } else {
+        setAlert({
+          type: 'success',
+          message: 'Account created successfully! Welcome to DataRaksha AI.',
+        });
+        setTimeout(() => {
+          if (onAuthSuccess) {
+            onAuthSuccess(result.user, result.role || 'individual');
+          }
+        }, 600);
+      }
     } catch (err) {
       setAlert({
         type: 'error',
@@ -264,6 +264,14 @@ export const AuthPage = ({
   // ---------------------------------------------------------------------------
   const handleResetPassword = async (e) => {
     if (e) e.preventDefault();
+    if (!isOnline) {
+      setAlert({
+        type: 'error',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     if (!forgotEmail.trim() || !emailRegex.test(forgotEmail.trim())) {
       setAlert({
         type: 'warning',
@@ -280,12 +288,12 @@ export const AuthPage = ({
       setResetSuccess(true);
       setAlert({
         type: 'success',
-        message: 'Password reset instructions have been sent to your email address.',
+        message: 'Password reset link sent! Please check your email inbox.',
       });
     } catch (err) {
       setAlert({
         type: 'error',
-        message: err.message || 'Failed to send reset link. Please try again shortly.',
+        message: err.message || 'Failed to send reset link. Please check the email and try again.',
       });
     } finally {
       setIsResetting(false);
@@ -305,10 +313,18 @@ export const AuthPage = ({
           </h2>
           <p className="auth-sub-title">
             {authMode === 'login'
-              ? 'Access your privacy shield, threat analytics, and statutory rights portal.'
-              : 'Create an encrypted account to protect your data identity across the web.'}
+              ? 'Sign in to access your digital risk protection dashboard.'
+              : 'Create an account to protect your privacy and analyze digital risks.'}
           </p>
         </div>
+
+        {/* Offline Warning Banner if disconnected */}
+        {!isOnline && (
+          <div className="auth-offline-banner mb-3">
+            <AlertCircle size={16} />
+            <span>No internet connection. Please check your network and try again.</span>
+          </div>
+        )}
 
         {/* Tab Switcher: Sign In vs. Create Account */}
         <div className="auth-tabs-nav" role="tablist" aria-label="Authentication Options">
@@ -322,7 +338,6 @@ export const AuthPage = ({
               setAuthMode('login');
               setShowForgotPassword(false);
               setAlert(null);
-              setIsRedirecting(false);
             }}
           >
             Sign In
@@ -337,7 +352,6 @@ export const AuthPage = ({
               setAuthMode('register');
               setShowForgotPassword(false);
               setAlert(null);
-              setIsRedirecting(false);
             }}
           >
             Create Account
@@ -440,24 +454,17 @@ export const AuthPage = ({
             {/* Submit Button */}
             <button
               id="login-submit-btn"
-              type={loginSuccess ? 'button' : 'submit'}
-              className={`btn btn-primary auth-submit-btn w-full ${loginSuccess ? 'auth-btn-success' : ''}`}
-              onClick={loginSuccess ? () => onAuthSuccess && onAuthSuccess() : undefined}
-              disabled={isLoggingIn}
+              type="submit"
+              className="btn btn-primary auth-submit-btn w-full"
+              disabled={isLoggingIn || !isOnline}
             >
-              {loginSuccess ? (
-                <>
-                  <CheckCircle2 size={18} />
-                  <span>Go to Dashboard</span>
-                  <ArrowRight size={16} />
-                </>
-              ) : isLoggingIn ? (
+              {isLoggingIn ? (
                 <>
                   <div className="spinner sm" /> Verifying Credentials...
                 </>
               ) : (
                 <>
-                  <span>Sign In to Dashboard</span>
+                  <span>Sign In</span>
                   <ArrowRight size={16} />
                 </>
               )}
@@ -475,7 +482,7 @@ export const AuthPage = ({
               <div>
                 <h4 className="forgot-title">Reset Your Password</h4>
                 <p className="forgot-desc">
-                  Enter your registered email address and we will send you verification instructions.
+                  Enter your registered email address and we will send you a password reset link.
                 </p>
               </div>
             </div>
@@ -503,9 +510,9 @@ export const AuthPage = ({
               <button
                 type="submit"
                 className="btn btn-primary w-full"
-                disabled={isResetting || resetSuccess}
+                disabled={isResetting || resetSuccess || !isOnline}
               >
-                {isResetting ? 'Sending link...' : resetSuccess ? 'Reset Link Sent' : 'Send Reset Instructions'}
+                {isResetting ? 'Sending link...' : resetSuccess ? 'Reset Link Sent' : 'Send Reset Link'}
               </button>
               <button
                 type="button"
@@ -538,7 +545,7 @@ export const AuthPage = ({
                   id="reg-name-input"
                   type="text"
                   className="input-field auth-text-input"
-                  placeholder="Enter your full legal name"
+                  placeholder="Enter your full name"
                   value={regName}
                   onChange={(e) => {
                     setRegName(e.target.value);
@@ -681,15 +688,15 @@ export const AuthPage = ({
               id="register-submit-btn"
               type="submit"
               className="btn btn-primary auth-submit-btn w-full"
-              disabled={isRegistering}
+              disabled={isRegistering || !isOnline}
             >
               {isRegistering ? (
                 <>
-                  <div className="spinner sm" /> Creating Security Profile...
+                  <div className="spinner sm" /> Creating Account...
                 </>
               ) : (
                 <>
-                  <span>Create Encrypted Account</span>
+                  <span>Create Account</span>
                   <ShieldCheck size={16} />
                 </>
               )}

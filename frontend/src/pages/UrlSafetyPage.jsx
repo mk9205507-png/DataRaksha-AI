@@ -13,6 +13,7 @@ import ResultCard from '../components/scanner/ResultCard';
 import Alert from '../components/common/Alert';
 import { scanService } from '../services/scanService';
 import { historyService } from '../services/historyService';
+import { useAuth } from '../context/AuthContext';
 
 const EXAMPLE_URLS = [
   { label: 'https://google.com', tag: 'Safe' },
@@ -23,6 +24,7 @@ const EXAMPLE_URLS = [
 ];
 
 export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData }) => {
+  const { user, isOnline } = useAuth();
   const [urlInput, setUrlInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -56,6 +58,14 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
       return;
     }
 
+    if (!navigator.onLine || isOnline === false) {
+      setAlert({
+        type: 'warning',
+        message: 'No internet connection. Please check your network and try again.',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setAlert(null);
 
@@ -67,13 +77,26 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
         preview: trimmed,
         result: data,
         target_company: trimmed,
+        userId: user?.id,
       });
     } catch (err) {
+      const errMsg =
+        err.message ||
+        err.response?.data?.detail ||
+        'Failed to inspect URL. Ensure it includes http:// or https:// and try again.';
+
       setAlert({
         type: 'error',
-        message:
-          err.response?.data?.detail ||
-          'Failed to inspect URL. Ensure it includes http:// or https:// and try again.',
+        message: errMsg,
+        action: (
+          <button
+            type="button"
+            className="btn btn-secondary action-sm"
+            onClick={() => runUrlScan(trimmed)}
+          >
+            Retry
+          </button>
+        ),
       });
     } finally {
       setIsLoading(false);
@@ -154,11 +177,16 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
               id="check-url-btn"
               type="submit"
               className="btn btn-primary url-submit-btn"
-              disabled={isLoading || !urlInput.trim()}
+              disabled={isLoading || !urlInput.trim() || !isOnline}
+              title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Check URL'}
             >
               {isLoading ? (
                 <>
                   <div className="spinner sm" /> Checking...
+                </>
+              ) : !isOnline ? (
+                <>
+                  <Globe size={16} /> Offline
                 </>
               ) : (
                 <>

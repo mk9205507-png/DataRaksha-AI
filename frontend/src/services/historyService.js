@@ -2,140 +2,69 @@ import apiClient from './api';
 
 const STORAGE_KEY = 'dataraksha_scan_history';
 
-// Baseline reference history records
-export const INITIAL_HISTORY = [
-  {
-    id: 'hist-1',
-    scan_type: 'email',
-    title: 'Email Analysis',
-    timestamp: '16 Oct 2026, 2:30 PM',
-    created_at: '2026-10-16T14:30:00Z',
-    risk_level: 'High',
-    risk_score: 92,
-    badgeClass: 'risk-badge-high',
-    iconColor: 'blue',
-    preview:
-      'URGENT: Your bank account at State Bank has been suspended due to unauthorized access. Click http://sbi-verification-secure-portal.xyz/login immediately or call +91-9876543210 to verify your Aadhaar, PAN and PIN within 2 hours...',
-    summary:
-      'Urgency coercion heuristics, bank impersonation, and deceptive verification URL detected.',
-    threats: ['Phishing Urgency Cue', 'Unverified Financial Domain', 'PII Harvest Attempt (PAN, PIN)'],
-    exposed_pii: [
-      { type: 'Phone Number', value: '+91-9876543210' },
-      { type: 'Govt ID', value: 'Aadhaar / PAN' },
-    ],
-    recommendations: [
-      'Do not click the verification link.',
-      'Contact State Bank through official banking channels.',
-    ],
-    target_company: 'State Bank of India',
-  },
-  {
-    id: 'hist-2',
-    scan_type: 'url',
-    title: 'URL Analysis',
-    timestamp: '16 Oct 2026, 11:30 AM',
-    created_at: '2026-10-16T11:30:00Z',
-    risk_level: 'Low',
-    risk_score: 8,
-    badgeClass: 'risk-badge-low',
-    iconColor: 'blue',
-    preview: 'https://google.com',
-    summary: 'Domain verified against Google Safe Browsing and legitimate HTTPS SSL certificates.',
-    threats: ['No threats detected'],
-    exposed_pii: [],
-    recommendations: ['Verified safe destination.'],
-    target_company: 'Google',
-  },
-  {
-    id: 'hist-3',
-    scan_type: 'policy',
-    title: 'Privacy Policy',
-    timestamp: '15 Oct 2026, 4:15 PM',
-    created_at: '2026-10-15T16:15:00Z',
-    risk_level: 'Medium',
-    risk_score: 65,
-    badgeClass: 'risk-badge-medium',
-    iconColor: 'amber',
-    preview:
-      'We collect your exact GPS location, browser history, microphone telemetry, and share with third-party advertising brokers indefinitely without mandatory prior notice...',
-    summary: 'Policy contains aggressive data broker monetization and perpetual audio telemetry retention.',
-    threats: ['Data Broker Monetization', 'Real-time GPS Tracking', 'Ambient Audio Telemetry'],
-    exposed_pii: [],
-    recommendations: [
-      'Revoke microphone and background location permissions in app settings.',
-      'Draft a statutory data deletion request notice.',
-    ],
-    target_company: 'Acme Social Ad-Tech',
-  },
-  {
-    id: 'hist-4',
-    scan_type: 'email',
-    title: 'Email Analysis',
-    timestamp: '14 Oct 2026, 1:10 PM',
-    created_at: '2026-10-14T13:10:00Z',
-    risk_level: 'Low',
-    risk_score: 12,
-    badgeClass: 'risk-badge-low',
-    iconColor: 'blue',
-    preview:
-      'Hi Kalyani, please remember our sprint review sync today at 3:00 PM via Google Meet. The project slides and architecture notes have been shared in the team workspace.',
-    summary: 'Clean business communication. No phishing indicators or sensitive data exposed.',
-    threats: ['No threats detected'],
-    exposed_pii: [],
-    recommendations: ['No action required.'],
-    target_company: 'Internal Team',
-  },
-  {
-    id: 'hist-5',
-    scan_type: 'url',
-    title: 'URL Analysis',
-    timestamp: '13 Oct 2026, 3:45 PM',
-    created_at: '2026-10-13T15:45:00Z',
-    risk_level: 'Medium',
-    risk_score: 55,
-    badgeClass: 'risk-badge-medium',
-    iconColor: 'blue',
-    preview: 'http://bit.ly/claim-bank-cashback-instant',
-    summary: 'Shortened obfuscated link redirecting to unverified landing page.',
-    threats: ['URL Shortener Obfuscation', 'Unencrypted HTTP Protocol'],
-    exposed_pii: [],
-    recommendations: ['Avoid clicking shortened links from untrusted communications.'],
-    target_company: 'Bitly Redirect Service',
-  },
-];
+const getCurrentUserId = () => {
+  try {
+    const raw = localStorage.getItem('dataraksha_user');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || '';
+    }
+  } catch {
+    // Graceful fallback
+  }
+  return '';
+};
 
 export const historyService = {
   /**
-   * Retrieves all scan history records from localStorage.
-   * If empty, seeds with baseline demo records so user sees realistic data.
+   * Cleans up legacy un-scoped scan history from previous sessions so old
+   * mock/test data never bleeds into new user accounts.
    */
-  getStoredScans: () => {
+  purgeLegacyUnscopedHistory: () => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // Graceful fallback
+    }
+  },
+
+  /**
+   * Retrieves all scan history records from localStorage for the active user.
+   * Strictly returns only records belonging to the given userId (empty array for new users).
+   */
+  getStoredScans: (customUserId) => {
+    try {
+      const userId = customUserId !== undefined ? customUserId : getCurrentUserId();
+      if (!userId) {
+        return [];
+      }
+      const storageKey = `${STORAGE_KEY}_${userId}`;
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (item) => item && item.user_id === userId && !String(item.id).startsWith('hist-')
+          );
         }
       }
     } catch (e) {
       console.warn('Error reading local scan history:', e);
     }
-
-    // Seed default records
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_HISTORY));
-    } catch {
-      // Ignored
-    }
-    return INITIAL_HISTORY;
+    return [];
   },
 
   /**
    * Saves a newly completed scan record to localStorage and notifies listeners.
    */
-  saveScanRecord: ({ scan_type, preview, result, target_company = '' }) => {
+  saveScanRecord: ({ scan_type, preview, result, target_company = '', userId }) => {
     if (!result) return null;
+
+    const uid = userId || getCurrentUserId();
+    if (!uid) {
+      console.warn('Cannot save scan without an authenticated user ID');
+      return null;
+    }
 
     const normalizedType =
       scan_type === 'message' || scan_type === 'email'
@@ -153,6 +82,7 @@ export const historyService = {
 
     const record = {
       id: `scan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      user_id: uid,
       scan_type: normalizedType,
       title: isEmail ? 'Email Analysis' : isUrl ? 'URL Analysis' : 'Privacy Policy',
       timestamp: new Date().toLocaleString('en-GB', {
@@ -182,16 +112,16 @@ export const historyService = {
     };
 
     try {
-      const existing = historyService.getStoredScans();
-      // Remove any identical duplicate preview at the top
+      const storageKey = `${STORAGE_KEY}_${uid}`;
+      const existing = historyService.getStoredScans(uid);
       const filtered = existing.filter((item) => item.preview !== record.preview);
       const updated = [record, ...filtered];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
 
       // Broadcast update event to all listening components
       window.dispatchEvent(
         new CustomEvent('dataraksha:history_updated', {
-          detail: { newRecord: record, allRecords: updated },
+          detail: { newRecord: record, allRecords: updated, userId: uid },
         })
       );
     } catch (e) {
@@ -204,15 +134,18 @@ export const historyService = {
   /**
    * Deletes a single scan by ID.
    */
-  deleteStoredScan: async (id) => {
+  deleteStoredScan: async (id, customUserId) => {
     try {
-      const existing = historyService.getStoredScans();
+      const uid = customUserId || getCurrentUserId();
+      if (!uid) return;
+      const storageKey = `${STORAGE_KEY}_${uid}`;
+      const existing = historyService.getStoredScans(uid);
       const updated = existing.filter((item) => item.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
 
       window.dispatchEvent(
         new CustomEvent('dataraksha:history_updated', {
-          detail: { deletedId: id, allRecords: updated },
+          detail: { deletedId: id, allRecords: updated, userId: uid },
         })
       );
     } catch (e) {
@@ -231,15 +164,18 @@ export const historyService = {
   },
 
   /**
-   * Clears all stored scan history.
+   * Clears all stored scan history for the active user.
    */
-  clearAllStoredScans: async () => {
+  clearAllStoredScans: async (customUserId) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+      const uid = customUserId || getCurrentUserId();
+      if (!uid) return;
+      const storageKey = `${STORAGE_KEY}_${uid}`;
+      localStorage.setItem(storageKey, JSON.stringify([]));
 
       window.dispatchEvent(
         new CustomEvent('dataraksha:history_updated', {
-          detail: { allRecords: [] },
+          detail: { allRecords: [], userId: uid },
         })
       );
     } catch (e) {
@@ -259,14 +195,19 @@ export const historyService = {
 
   /**
    * Fetches remote scan history from backend /history endpoint if authenticated,
-   * merges with local records, and returns normalized history.
+   * merges with local records for this user, and returns normalized history.
    */
-  fetchAndSyncHistory: async () => {
-    const local = historyService.getStoredScans();
+  fetchAndSyncHistory: async (customUserId) => {
+    const uid = customUserId || getCurrentUserId();
+    if (!uid) {
+      return [];
+    }
+
+    const storageKey = `${STORAGE_KEY}_${uid}`;
     const token = localStorage.getItem('dataraksha_auth_token');
 
     if (!token) {
-      return local;
+      return historyService.getStoredScans(uid);
     }
 
     try {
@@ -277,8 +218,9 @@ export const historyService = {
         ? res.data.records
         : [];
 
-      if (rawRecords.length > 0) {
-        const formattedRemote = rawRecords.map((item, idx) => {
+      const formattedRemote = rawRecords
+        .filter((item) => !item.user_id || item.user_id === uid)
+        .map((item, idx) => {
           const isEmail = item.scan_type === 'message' || item.scan_type === 'email';
           const isUrl = item.scan_type === 'link' || item.scan_type === 'url';
           const isPolicy = item.scan_type === 'policy';
@@ -286,6 +228,7 @@ export const historyService = {
 
           return {
             id: item.id || `remote-${idx}`,
+            user_id: uid,
             scan_type: isEmail ? 'email' : isUrl ? 'url' : 'policy',
             title: isEmail ? 'Email Analysis' : isUrl ? 'URL Analysis' : 'Privacy Policy',
             timestamp: item.created_at
@@ -300,7 +243,7 @@ export const historyService = {
               : 'Recent',
             created_at: item.created_at || new Date().toISOString(),
             risk_level: riskLevel,
-            risk_score: item.risk_score || 0,
+            risk_score: typeof item.risk_score === 'number' ? item.risk_score : 0,
             badgeClass:
               riskLevel === 'High'
                 ? 'risk-badge-high'
@@ -308,7 +251,7 @@ export const historyService = {
                 ? 'risk-badge-medium'
                 : 'risk-badge-low',
             iconColor: isPolicy ? 'amber' : 'blue',
-            preview: item.input_preview || item.content || '',
+            preview: item.input_preview || item.content || item.preview || '',
             summary: item.summary || 'Threat scan completed.',
             threats: item.detected_threats || [],
             exposed_pii: item.exposed_pii || [],
@@ -317,32 +260,34 @@ export const historyService = {
           };
         });
 
-        // Merge remote and local records by ID
-        const seenIds = new Set();
-        const merged = [];
+      // Local records strictly for this user
+      const local = historyService.getStoredScans(uid);
 
-        for (const rec of formattedRemote) {
-          if (!seenIds.has(rec.id)) {
-            seenIds.add(rec.id);
-            merged.push(rec);
-          }
+      // Merge remote and local records by preview / ID
+      const seenPreviews = new Set();
+      const merged = [];
+
+      for (const rec of formattedRemote) {
+        if (!seenPreviews.has(rec.preview)) {
+          seenPreviews.add(rec.preview);
+          merged.push(rec);
         }
-
-        for (const rec of local) {
-          if (!seenIds.has(rec.id)) {
-            seenIds.add(rec.id);
-            merged.push(rec);
-          }
-        }
-
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        return merged;
       }
+
+      for (const rec of local) {
+        if (rec.user_id === uid && !seenPreviews.has(rec.preview)) {
+          seenPreviews.add(rec.preview);
+          merged.push(rec);
+        }
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(merged));
+      return merged;
     } catch (err) {
       console.warn('Backend history sync skipped or offline:', err);
     }
 
-    return local;
+    return historyService.getStoredScans(uid);
   },
 };
 

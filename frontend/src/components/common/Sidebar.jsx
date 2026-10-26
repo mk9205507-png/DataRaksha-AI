@@ -26,12 +26,11 @@ export const Sidebar = ({
   setIsCollapsed,
   onCloseMobile,
 }) => {
-  const { user, isAdmin, isAuthenticated, logout, loginAsDemoUser, loginAsDemoAdmin } = useAuth();
+  const { user, isAdmin, isAuthenticated, logout } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   // Core navigation items
   const navItems = [
-    { id: 'home', label: 'Home', icon: Home, tooltip: 'Overview & Features' },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, tooltip: 'Threat Metrics & Overview' },
     { id: 'email', label: 'Email Safety', icon: Mail, tooltip: 'Phishing & Email Threat Scanner' },
     { id: 'url', label: 'URL Safety', icon: Link2, tooltip: 'Malicious Link & Domain Scanner' },
@@ -81,10 +80,10 @@ export const Sidebar = ({
       <div className="sidebar-brand-wrapper">
         <div
           className="sidebar-brand"
-          onClick={() => handleNavClick('home')}
+          onClick={() => handleNavClick('dashboard')}
           role="button"
           tabIndex={0}
-          title="DataRaksha AI Home"
+          title="DataRaksha AI Dashboard"
         >
           <div className="sidebar-brand-icon">
             <Shield size={22} className="shield-icon" />
@@ -190,31 +189,12 @@ export const Sidebar = ({
               <strong>{displayName}</strong>
               <small>{user?.email || 'kalyani@dataraksha.ai'}</small>
             </div>
+            <div className="popover-badge-row">
+              <span className={`sidebar-role-badge ${isAdmin ? 'admin-badge' : 'user-badge'}`}>
+                {isAdmin ? 'Administrator' : 'Individual Account'}
+              </span>
+            </div>
             <div className="popover-divider" />
-
-            <button
-              type="button"
-              className="popover-item"
-              onClick={() => {
-                if (loginAsDemoUser) loginAsDemoUser();
-                setProfileMenuOpen(false);
-              }}
-            >
-              <User size={14} />
-              <span>Switch to Demo User</span>
-            </button>
-
-            <button
-              type="button"
-              className="popover-item"
-              onClick={() => {
-                if (loginAsDemoAdmin) loginAsDemoAdmin();
-                setProfileMenuOpen(false);
-              }}
-            >
-              <ShieldAlert size={14} />
-              <span>Switch to Demo Admin</span>
-            </button>
 
             {isAuthenticated ? (
               <button
@@ -233,11 +213,11 @@ export const Sidebar = ({
                 className="popover-item primary"
                 onClick={() => {
                   setProfileMenuOpen(false);
-                  if (onOpenAuth) onOpenAuth();
+                  if (onOpenAuth) onOpenAuth('login');
                 }}
               >
                 <User size={14} />
-                <span>Sign In / Sign Up</span>
+                <span>Sign In</span>
               </button>
             )}
           </div>

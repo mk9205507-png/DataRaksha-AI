@@ -23,7 +23,9 @@ import { useAuth } from '../context/AuthContext';
 
 export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateToLetters }) => {
   const { isAuthenticated, user } = useAuth();
-  const [historyList, setHistoryList] = useState(() => historyService.getStoredScans());
+  const [historyList, setHistoryList] = useState(() =>
+    user?.id ? historyService.getStoredScans(user.id) : []
+  );
   const [selectedItem, setSelectedItem] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,13 +34,18 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateTo
 
   // Sync with remote /history if authenticated, and listen for live updates
   useEffect(() => {
-    // 1. Initial local load
-    setHistoryList(historyService.getStoredScans());
+    if (!isAuthenticated || !user?.id) {
+      setHistoryList([]);
+      return;
+    }
 
-    // 2. Remote sync if authenticated
+    // 1. Initial local load for this user
+    setHistoryList(historyService.getStoredScans(user.id));
+
+    // 2. Remote sync strictly for this user
     const syncRemote = async () => {
       try {
-        const synced = await historyService.fetchAndSyncHistory();
+        const synced = await historyService.fetchAndSyncHistory(user.id);
         if (Array.isArray(synced)) {
           setHistoryList(synced);
         }
@@ -50,10 +57,14 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateTo
 
     // 3. Live event listener for scans added across other tabs/pages
     const handleHistoryUpdate = (e) => {
+      if (e.detail?.userId && e.detail.userId !== user.id) {
+        return; // Ignore events from other accounts
+      }
       if (Array.isArray(e.detail?.allRecords)) {
-        setHistoryList(e.detail.allRecords);
+        const myRecords = e.detail.allRecords.filter((r) => r.user_id === user.id);
+        setHistoryList(myRecords);
       } else {
-        setHistoryList(historyService.getStoredScans());
+        setHistoryList(historyService.getStoredScans(user.id));
       }
     };
 
@@ -61,18 +72,18 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateTo
     return () => {
       window.removeEventListener('dataraksha:history_updated', handleHistoryUpdate);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id]);
 
   const handleDelete = async (id, e) => {
     if (e) e.stopPropagation();
-    await historyService.deleteStoredScan(id);
+    await historyService.deleteStoredScan(id, user?.id);
     setHistoryList((prev) => prev.filter((item) => item.id !== id));
     if (selectedItem?.id === id) setSelectedItem(null);
     setAlert({ type: 'info', message: 'Analysis record removed from your history.' });
   };
 
   const handleClearAll = async () => {
-    await historyService.clearAllStoredScans();
+    await historyService.clearAllStoredScans(user?.id);
     setHistoryList([]);
     setSelectedItem(null);
     setShowClearConfirm(false);
@@ -240,12 +251,25 @@ export const AnalysisHistoryPage = ({ onNavigateBack, onReopenScan, onNavigateTo
         {filteredItems.length === 0 ? (
           <div className="empty-history-card card">
             <Shield size={36} className="text-muted mb-2" />
-            <h3>No matching analyses found</h3>
+            <h3>{historyList.length === 0 ? 'No analyses yet' : 'No matching analyses found'}</h3>
             <p>
               {searchQuery
                 ? `No scans matched "${searchQuery}". Try a different keyword.`
-                : 'Scans you perform in Email Safety, URL Safety, or Privacy Policy will appear here automatically.'}
+                : historyList.length === 0
+                ? "You haven't scanned any emails, web links, or privacy policies yet. Scans you perform will appear here automatically."
+                : 'No analyses matched the selected filter criteria.'}
             </p>
+            {historyList.length === 0 && (
+              <button
+                type="button"
+                className="btn btn-primary action-sm mt-3"
+                onClick={() => (onNavigateBack ? onNavigateBack() : null)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: '0.75rem auto 0' }}
+              >
+                <Sparkles size={15} />
+                <span>Start Your First Scan</span>
+              </button>
+            )}
           </div>
         ) : (
           filteredItems.map((item) => {
