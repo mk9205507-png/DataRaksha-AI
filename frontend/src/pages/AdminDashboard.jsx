@@ -727,15 +727,16 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                     <th>User Account</th>
                     <th>User ID</th>
                     <th>Role</th>
-                    <th>Created At</th>
+                    <th>Last Signed In</th>
                     <th>Total Scans</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isUsersLoading ? (
                     <tr>
-                      <td colSpan="6" className="text-center py-8">
+                      <td colSpan="7" className="text-center py-8">
                         <div className="flex items-center justify-center gap-2 text-muted">
                           <RefreshCw size={18} className="spin-icon" />
                           <span>Loading registered user accounts...</span>
@@ -744,21 +745,24 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                     </tr>
                   ) : usersData.users.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="text-center py-8 text-muted">
+                      <td colSpan="7" className="text-center py-8 text-muted">
                         No registered users found matching the search criteria.
                       </td>
                     </tr>
                   ) : (
                     usersData.users.map((u) => {
-                      const isSelf = currentUser?.id === u.id || currentUser?.email === u.email;
-                      const initial = (u.email || 'U')[0].toUpperCase();
+                      const isSelf = currentUser?.id === u.id || currentUser?.email?.toLowerCase() === u.email?.toLowerCase();
+                      const initial = (u.display_name || u.email || 'U')[0].toUpperCase();
                       return (
                         <tr key={u.id}>
                           <td>
                             <div className="user-info-cell">
                               <div className="user-avatar-circle">{initial}</div>
                               <div>
-                                <div className="user-email-text">{u.email}</div>
+                                <div className="user-name-text font-semibold text-sm">
+                                  {u.display_name || u.email.split('@')[0]}
+                                </div>
+                                <div className="user-email-text text-xs text-muted">{u.email}</div>
                                 {isSelf && <span className="text-xs text-blue font-semibold">(Current Admin)</span>}
                               </div>
                             </div>
@@ -778,10 +782,22 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                               {u.role === 'admin' ? '🛡️ Admin' : 'User'}
                             </span>
                           </td>
-                          <td className="user-date-text">{formatDate(u.created_at)}</td>
+                          <td className="user-date-text">
+                            <div className="font-medium text-xs">
+                              {formatDate(u.last_sign_in_at || u.created_at)}
+                            </div>
+                            <span className="text-slate-400 text-xs">
+                              Joined {formatDate(u.created_at)}
+                            </span>
+                          </td>
                           <td>
                             <span className="badge badge-subtle font-semibold">
                               {u.scan_count || 0} scans
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-success text-xs font-semibold">
+                              ● Active
                             </span>
                           </td>
                           <td>
@@ -815,6 +831,7 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                 </tbody>
               </table>
             </div>
+
 
             {/* Pagination */}
             <div className="admin-pagination">
@@ -1158,6 +1175,12 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
               ) : (
                 <>
                   <div className="modal-detail-row">
+                    <span className="modal-detail-label">Display Name</span>
+                    <span className="modal-detail-value font-semibold">
+                      {selectedUserDetails.display_name || selectedUserDetails.email?.split('@')[0]}
+                    </span>
+                  </div>
+                  <div className="modal-detail-row">
                     <span className="modal-detail-label">Email Address</span>
                     <span className="modal-detail-value">{selectedUserDetails.email}</span>
                   </div>
@@ -1174,6 +1197,12 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                     </span>
                   </div>
                   <div className="modal-detail-row">
+                    <span className="modal-detail-label">Last Signed In</span>
+                    <span className="modal-detail-value font-medium text-blue">
+                      {formatDate(selectedUserDetails.last_sign_in_at || selectedUserDetails.created_at)}
+                    </span>
+                  </div>
+                  <div className="modal-detail-row">
                     <span className="modal-detail-label">Account Created</span>
                     <span className="modal-detail-value">{formatDate(selectedUserDetails.created_at)}</span>
                   </div>
@@ -1181,6 +1210,7 @@ export const AdminDashboard = ({ user: propUser, onPromptLogin }) => {
                     <span className="modal-detail-label">Total Completed Scans</span>
                     <span className="modal-detail-value">{selectedUserDetails.total_scans} scans</span>
                   </div>
+
 
                   <h4 className="font-bold text-sm mt-4 mb-2">Recent User Scan Activity:</h4>
                   {selectedUserDetails.recent_scans?.length > 0 ? (
