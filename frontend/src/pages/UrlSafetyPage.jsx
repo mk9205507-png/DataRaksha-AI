@@ -31,12 +31,17 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
   const [alert, setAlert] = useState(null);
   const resultRef = useRef(null);
 
-  // Auto-populate when re-opened from Scan History
+  // Auto-populate when re-opened from Scan History (without automatic scan trigger)
   useEffect(() => {
     if (initialData?.preview || initialData?.url) {
       const url = initialData.preview || initialData.url;
       setUrlInput(url);
-      runUrlScan(url);
+      if (initialData.result) {
+        setResult(initialData.result);
+      } else {
+        setResult(null);
+      }
+      setAlert(null);
     }
   }, [initialData]);
 
@@ -49,14 +54,18 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
   }, [result]);
 
   const runUrlScan = async (targetUrl) => {
-    const trimmed = (targetUrl || '').trim();
+    const trimmed = (targetUrl !== undefined ? targetUrl : urlInput).trim();
     if (!trimmed) {
       setAlert({
         type: 'warning',
-        message: 'Please enter a website URL to evaluate.',
+        message: 'Please enter a URL to analyze.',
       });
+      setResult(null);
       return;
     }
+
+    // Prevent multiple simultaneous requests
+    if (isLoading) return;
 
     if (!navigator.onLine || isOnline === false) {
       setAlert({
@@ -81,9 +90,10 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
       });
     } catch (err) {
       const errMsg =
-        err.message ||
+        err.friendlyMessage ||
         err.response?.data?.detail ||
-        'Failed to inspect URL. Ensure it includes http:// or https:// and try again.';
+        err.message ||
+        'Failed to inspect URL. Ensure the backend server is reachable and try again.';
 
       setAlert({
         type: 'error',
@@ -98,6 +108,7 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
           </button>
         ),
       });
+      setResult(null);
     } finally {
       setIsLoading(false);
     }
@@ -105,8 +116,8 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
 
   const handleSelectExample = (url) => {
     setUrlInput(url);
+    setResult(null);
     setAlert(null);
-    runUrlScan(url);
   };
 
   const handleScanUrl = async (e) => {
@@ -157,6 +168,7 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
                 value={urlInput}
                 onChange={(e) => {
                   setUrlInput(e.target.value);
+                  setResult(null);
                   if (alert) setAlert(null);
                 }}
                 disabled={isLoading}
@@ -177,12 +189,12 @@ export const UrlSafetyPage = ({ onNavigateBack, onNavigateToLetters, initialData
               id="check-url-btn"
               type="submit"
               className="btn btn-primary url-submit-btn"
-              disabled={isLoading || !urlInput.trim() || !isOnline}
+              disabled={isLoading || !isOnline}
               title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Check URL'}
             >
               {isLoading ? (
                 <>
-                  <div className="spinner sm" /> Checking...
+                  <div className="spinner sm" /> Analyzing URL...
                 </>
               ) : !isOnline ? (
                 <>

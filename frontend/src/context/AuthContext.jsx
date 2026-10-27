@@ -171,6 +171,19 @@ export const AuthProvider = ({ children }) => {
         setIsBackendAdmin(backendIsAdmin);
         const resolvedRole = backendIsAdmin ? 'admin' : 'individual';
 
+        // Dynamically synchronize active user session with backend so Admin Portal tracks real users
+        try {
+          await apiClient.post('/auth/record-session', {
+            user_id: rawUser.id,
+            email: rawUser.email,
+            display_name: displayName,
+            role: resolvedRole,
+            last_sign_in_at: rawUser.last_sign_in_at || new Date().toISOString(),
+          });
+        } catch (syncErr) {
+          console.debug('Dynamic session sync note:', syncErr?.message);
+        }
+
         const enrichedUser = {
           ...rawUser,
           role: resolvedRole,
@@ -187,6 +200,7 @@ export const AuthProvider = ({ children }) => {
         if (displayName) {
           localStorage.setItem('dataraksha_person_name', displayName);
         }
+
       } else {
         setSession(null);
         setUser(null);
@@ -379,6 +393,19 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('dataraksha_saved_email', cleanEmail);
     localStorage.setItem('dataraksha_person_name', cleanName);
 
+    // Record newly registered user with backend
+    try {
+      await apiClient.post('/auth/record-session', {
+        user_id: data?.user?.id,
+        email: cleanEmail,
+        display_name: cleanName,
+        role: 'individual',
+        last_sign_in_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.debug('Signup session sync note:', e?.message);
+    }
+
     // If session was established immediately (email confirmation disabled or auto-confirmed)
     if (data?.session && data?.user) {
       const activeUser = {
@@ -450,12 +477,25 @@ export const AuthProvider = ({ children }) => {
     if (cleanEmail) {
       localStorage.setItem('dataraksha_gmail_email', cleanEmail);
       localStorage.setItem('dataraksha_gmail_connected', 'true');
+
+      // Dynamically record Google authenticated user with backend
+      try {
+        await apiClient.post('/auth/record-session', {
+          email: cleanEmail,
+          display_name: personName,
+          role: cleanEmail === 'mk9205507@gmail.com' ? 'admin' : 'individual',
+          last_sign_in_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.debug('Google session sync note:', e?.message);
+      }
     }
     if (personName && !localStorage.getItem('dataraksha_person_name')) {
       localStorage.setItem('dataraksha_person_name', personName);
     }
     return { success: true };
   };
+
 
   const value = {
     user,

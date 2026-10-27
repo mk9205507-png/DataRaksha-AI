@@ -11,23 +11,13 @@ async def promote_user_to_admin(email: str):
 
     print(f"Assigning administrator role to: '{clean_email}'...")
 
-    # 1. Update in-memory mock store
-    found_in_mock = False
-    for uid, prof in supabase_service._mock_profiles.items():
-        if (prof.get("email") or "").lower() == clean_email:
-            prof["role"] = "admin"
-            found_in_mock = True
-            print(f"[OK] Updated local mock profile for {clean_email} (ID: {uid}) to 'admin'.")
+    # 1. Update persistent user registry and in-memory store
+    await supabase_service.record_user_session(
+        email=clean_email,
+        role="admin",
+    )
+    print(f"[OK] Registered real administrator '{clean_email}' in platform user registry.")
 
-    if not found_in_mock:
-        new_id = f"admin-{clean_email.replace('@', '-').replace('.', '-')}"
-        supabase_service._mock_profiles[new_id] = {
-            "id": new_id,
-            "email": clean_email,
-            "role": "admin",
-            "created_at": "2026-01-01T00:00:00Z",
-        }
-        print(f"[OK] Created local admin profile for {clean_email} (ID: {new_id}).")
 
     # 2. Update Supabase PostgreSQL database
     client = supabase_service.db_client

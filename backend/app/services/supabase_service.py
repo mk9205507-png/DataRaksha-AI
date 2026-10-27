@@ -2,6 +2,10 @@ import logging
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
 
+import json
+from pathlib import Path
+from datetime import datetime, timezone
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +18,14 @@ class SupabaseService:
         self.service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
         self._client = None
         self._admin_client = None
+
+        # Data directories for dynamic, persistent telemetry
+        self._data_dir = Path(__file__).resolve().parent.parent / "data"
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._users_registry_file = self._data_dir / "users_registry.json"
+        self._scans_registry_file = self._data_dir / "scans_registry.json"
+
+        self._registered_users: Dict[str, Dict[str, Any]] = {}
         self._mock_scans: Dict[str, List[Dict[str, Any]]] = {}
         self._mock_gmail_connections: Dict[str, Dict[str, Any]] = {}
         self._mock_profiles: Dict[str, Dict[str, Any]] = {
@@ -45,6 +57,10 @@ class SupabaseService:
             }
         ]
 
+        # Load dynamic persistent registries
+        self._load_registered_users()
+        self._load_registered_scans()
+
         if self.url and self.key and "placeholder" not in self.url:
             try:
                 from supabase import create_client
@@ -63,6 +79,79 @@ class SupabaseService:
             except Exception as e:
                 logger.warning(f"Could not initialize Supabase service_role client: {e}")
 
+    def _load_registered_users(self):
+        """Loads persistent registered users and registers designated initial administrator."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if self._users_registry_file.exists():
+            try:
+                with open(self._users_registry_file, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                    if isinstance(content, dict) and "users" in content:
+                        self._registered_users = content["users"]
+            except Exception as e:
+                logger.warning(f"Could not load users_registry.json: {e}")
+
+        # Ensure designated admin is always present
+        admin_emails = [
+            e.strip().lower()
+            for e in (
+                (getattr(settings, "ADMIN_EMAILS", "") or "")
+                + ","
+                + (getattr(settings, "INITIAL_ADMIN_EMAILS", "mk9205507@gmail.com") or "")
+            ).split(",")
+            if e.strip()
+        ]
+
+        for adm_email in admin_emails:
+            exists = any(u.get("email", "").lower() == adm_email for u in self._registered_users.values())
+            if not exists:
+                admin_uid = f"admin-{adm_email.replace('@', '-').replace('.', '-')}"
+                self._registered_users[admin_uid] = {
+                    "id": admin_uid,
+                    "email": adm_email,
+                    "display_name": "Kalyani More" if "mk9205507" in adm_email else adm_email.split("@")[0].capitalize(),
+                    "role": "admin",
+                    "created_at": "2026-10-20T10:00:00Z",
+                    "last_sign_in_at": now_iso,
+                    "updated_at": now_iso,
+                    "status": "active",
+                }
+
+        # Populate mock profiles dictionary so any legacy lookups succeed
+        for uid, u in self._registered_users.items():
+            self._mock_profiles[uid] = dict(u)
+
+        self._save_registered_users()
+
+    def _save_registered_users(self):
+        """Persists registered users to disk."""
+        try:
+            with open(self._users_registry_file, "w", encoding="utf-8") as f:
+                json.dump({"users": self._registered_users}, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save users_registry.json: {e}")
+
+    def _load_registered_scans(self):
+        """Loads persistent scans from disk."""
+        if self._scans_registry_file.exists():
+            try:
+                with open(self._scans_registry_file, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                    if isinstance(content, dict) and "scans" in content:
+                        for uid, s_list in content["scans"].items():
+                            self._mock_scans.setdefault(uid, []).extend(s_list)
+            except Exception as e:
+                logger.warning(f"Could not load scans_registry.json: {e}")
+
+    def _save_registered_scans(self):
+        """Persists scans to disk."""
+        try:
+            with open(self._scans_registry_file, "w", encoding="utf-8") as f:
+                json.dump({"scans": self._mock_scans}, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save scans_registry.json: {e}")
+
+
     @property
     def is_connected(self) -> bool:
         return self._client is not None
@@ -73,7 +162,7 @@ class SupabaseService:
         return self._admin_client or self._client
 
     async def save_scan_history(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Persists a scan record to scan_history table."""
+        """Persists a scan record to scan_history table and persistent registry."""
         user_id = str(record.get("user_id") or "")
         import uuid
         from datetime import datetime, timezone
@@ -81,7 +170,13 @@ class SupabaseService:
             record["id"] = str(uuid.uuid4())
         if "created_at" not in record:
             record["created_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Ensure user_email is attached if known
+        if not record.get("user_email") and user_id in self._registered_users:
+            record["user_email"] = self._registered_users[user_id].get("email")
+
         self._mock_scans.setdefault(user_id, []).insert(0, record)
+        self._save_registered_scans()
 
         # For local demo accounts or test accounts, avoid inserting to Supabase table
         if not self._client or user_id.startswith("00000000-0000-0000-0000-") or "demo" in user_id or user_id.startswith("test-"):
@@ -102,10 +197,11 @@ class SupabaseService:
                 logger.debug(f"Profiles upsert check note: {pe}")
 
             res = self._client.table("scan_history").insert(record).execute()
-            return res.data[0] if res.data else None
+            return res.data[0] if (res and res.data) else record
         except Exception as e:
-            logger.error(f"Failed to persist scan history: {e}")
-            return None
+            logger.debug(f"Note on persisting scan to remote scan_history table: {e}")
+            return record
+
 
     async def get_user_scans(
         self,
@@ -207,14 +303,22 @@ class SupabaseService:
             return None
 
     async def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Fetches the user's extended profile from public.profiles."""
+        """Fetches the user's extended profile from persistent registry or public.profiles."""
         user_id_str = str(user_id)
+        if user_id_str in self._registered_users:
+            return self._registered_users[user_id_str]
         if user_id_str in self._mock_profiles:
             return self._mock_profiles[user_id_str]
 
+        # Check by email if user_id_str is an email
+        if "@" in user_id_str:
+            for u in self._registered_users.values():
+                if u.get("email", "").lower() == user_id_str.lower():
+                    return u
+
         client = self.db_client
         if not client:
-            return self._mock_profiles.get(user_id_str)
+            return self._registered_users.get(user_id_str) or self._mock_profiles.get(user_id_str)
 
         try:
             res = (
@@ -227,7 +331,8 @@ class SupabaseService:
             return res.data if res else None
         except Exception as e:
             logger.debug(f"Could not fetch profile for user {user_id}: {e}")
-            return self._mock_profiles.get(user_id_str)
+            return self._registered_users.get(user_id_str) or self._mock_profiles.get(user_id_str)
+
 
     async def save_gmail_connection(
         self,
@@ -347,13 +452,138 @@ class SupabaseService:
             logger.error(f"Failed to delete Gmail connection for {user_id}: {e}")
             return False
 
+    async def record_user_session(
+        self,
+        user_id: Optional[str] = None,
+        email: str = "",
+        display_name: Optional[str] = None,
+        role: Optional[str] = None,
+        last_sign_in_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Dynamically records or updates a real user session on the platform.
+        Ensures users who sign in or authenticate are immediately tracked
+        and presented in the administrator portal with genuine telemetry.
+        """
+        import uuid
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        clean_email = (email or "").strip().lower()
+        if not clean_email:
+            clean_email = f"user_{str(user_id or uuid.uuid4())[:8]}@dataraksha.ai"
+
+        # Determine admin privileges from allowlist
+        admin_emails = [
+            e.strip().lower()
+            for e in (
+                (getattr(settings, "ADMIN_EMAILS", "") or "")
+                + ","
+                + (getattr(settings, "INITIAL_ADMIN_EMAILS", "mk9205507@gmail.com") or "")
+            ).split(",")
+            if e.strip()
+        ]
+
+        resolved_role = "admin" if (clean_email in admin_emails or role == "admin") else (role or "individual")
+
+        # Derive clean display name if missing or placeholder
+        if not display_name or display_name.strip().lower() in ("nisha", "user", "anonymous"):
+            prefix = clean_email.split("@")[0]
+            display_name = "".join([c if c.isalnum() else " " for c in prefix]).title() or "User"
+        else:
+            display_name = display_name.strip()
+
+        # Check if user already exists by user_id or email
+        existing_uid = None
+        if user_id and str(user_id) in self._registered_users:
+            existing_uid = str(user_id)
+        else:
+            for uid, u in self._registered_users.items():
+                if u.get("email", "").lower() == clean_email:
+                    existing_uid = uid
+                    break
+
+        target_uid = str(user_id) if user_id else (existing_uid or str(uuid.uuid4()))
+        created_at = self._registered_users.get(target_uid, {}).get("created_at") or now_iso
+        sign_in_time = last_sign_in_at or now_iso
+
+        user_record = {
+            "id": target_uid,
+            "email": clean_email,
+            "display_name": display_name,
+            "role": resolved_role,
+            "created_at": created_at,
+            "last_sign_in_at": sign_in_time,
+            "last_active_at": now_iso,
+            "updated_at": now_iso,
+            "status": "active",
+        }
+
+        self._registered_users[target_uid] = user_record
+        self._mock_profiles[target_uid] = {
+            "id": target_uid,
+            "email": clean_email,
+            "display_name": display_name,
+            "role": resolved_role,
+            "created_at": created_at,
+            "last_sign_in_at": sign_in_time,
+            "updated_at": now_iso,
+        }
+        self._save_registered_users()
+
+        # Record audit log entry for user authentication event
+        audit_entry = {
+            "id": f"audit-signin-{int(datetime.now().timestamp())}-{target_uid[:6]}",
+            "admin_id": target_uid,
+            "admin_email": clean_email,
+            "action": "user_sign_in",
+            "target_entity": "user_account",
+            "target_id": target_uid,
+            "details": {
+                "message": f"User '{clean_email}' authenticated ({resolved_role})",
+                "role": resolved_role,
+                "display_name": display_name,
+                "timestamp": sign_in_time,
+            },
+            "created_at": sign_in_time,
+        }
+        self._mock_audit_logs.insert(0, audit_entry)
+
+        # Attempt Supabase profiles upsert if available
+        client = self.db_client
+        if client:
+            try:
+                client.table("profiles").upsert({
+                    "id": target_uid,
+                    "email": clean_email,
+                    "role": resolved_role,
+                    "updated_at": now_iso,
+                }, on_conflict="id").execute()
+            except Exception as pe:
+                logger.debug(f"Supabase profile upsert note: {pe}")
+
+        return user_record
+
+    async def record_user_activity(
+        self,
+        user_id: str,
+        email: str,
+        role: Optional[str] = None,
+    ):
+        """Records active session heartbeat and registers user if not yet known."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        uid = str(user_id)
+        if uid in self._registered_users:
+            self._registered_users[uid]["last_active_at"] = now_iso
+            self._save_registered_users()
+        elif email:
+            await self.record_user_session(user_id=uid, email=email, role=role, last_sign_in_at=now_iso)
+
     async def get_admin_overview(self) -> Dict[str, Any]:
         """
-        Calculates aggregated platform metrics from genuine stored records in Supabase.
-        Returns total scans, scans today, risk level breakdown, scans by type,
-        registered user counts, and recent activity feed.
+        Calculates aggregated platform metrics from genuine stored records in Supabase
+        and dynamic registered users. Returns total scans, scans today, risk level breakdown,
+        scans by type, registered user counts, and recent activity feed.
         """
-        from datetime import datetime, timezone
         now_utc = datetime.now(timezone.utc)
         today_date_str = now_utc.strftime("%Y-%m-%d")
 
@@ -361,21 +591,22 @@ class SupabaseService:
         scans_today = 0
         risk_breakdown = {"low": 0, "medium": 0, "high": 0}
         scans_by_type = {"message": 0, "link": 0, "policy": 0}
-        registered_users = 0
         recent_activity: List[Dict[str, Any]] = []
 
         client = self.db_client
 
-        # 1. Query registered users count from profiles
+        # 1. Calculate registered users count dynamically from real users
+        registered_users = len(self._registered_users)
+        if registered_users == 0:
+            registered_users = len(self._mock_profiles)
+
         if client:
             try:
                 prof_res = client.table("profiles").select("id", count="exact").execute()
-                registered_users = prof_res.count if hasattr(prof_res, "count") and prof_res.count is not None else len(prof_res.data or [])
+                remote_count = prof_res.count if hasattr(prof_res, "count") and prof_res.count is not None else len(prof_res.data or [])
+                registered_users = max(registered_users, remote_count)
             except Exception as e:
-                logger.warning(f"Failed to fetch profiles count: {e}")
-                registered_users = len(self._mock_profiles)
-        else:
-            registered_users = len(self._mock_profiles)
+                logger.debug(f"Profiles count query note: {e}")
 
         # 2. Query scan_history table
         if client:
@@ -396,7 +627,7 @@ class SupabaseService:
                     if created.startswith(today_date_str):
                         scans_today += 1
 
-                for item in records[:8]:
+                for item in records[:6]:
                     recent_activity.append({
                         "id": str(item.get("id")),
                         "type": "scan",
@@ -407,23 +638,24 @@ class SupabaseService:
                         "timestamp": item.get("created_at"),
                     })
             except Exception as e:
-                logger.warning(f"Failed to query scan_history for admin overview: {e}")
-        else:
-            # In-memory mock scans aggregation
-            all_mock = [item for sublist in self._mock_scans.values() for item in sublist]
-            total_scans = len(all_mock)
-            for r in all_mock:
-                stype = (r.get("scan_type") or "").lower()
-                if stype in scans_by_type:
-                    scans_by_type[stype] += 1
-                rlevel = (r.get("risk_level") or "").lower()
-                if rlevel in risk_breakdown:
-                    risk_breakdown[rlevel] += 1
-                created = r.get("created_at") or ""
-                if created.startswith(today_date_str):
-                    scans_today += 1
+                logger.debug(f"Scan history query note: {e}")
 
-            for item in sorted(all_mock, key=lambda x: x.get("created_at", ""), reverse=True)[:8]:
+        # In-memory scans aggregation
+        all_mock = [item for sublist in self._mock_scans.values() for item in sublist]
+        total_scans = max(total_scans, len(all_mock))
+        for r in all_mock:
+            stype = (r.get("scan_type") or "").lower()
+            if stype in scans_by_type and not client:
+                scans_by_type[stype] += 1
+            rlevel = (r.get("risk_level") or "").lower()
+            if rlevel in risk_breakdown and not client:
+                risk_breakdown[rlevel] += 1
+            created = r.get("created_at") or ""
+            if created.startswith(today_date_str) and not client:
+                scans_today += 1
+
+        for item in sorted(all_mock, key=lambda x: x.get("created_at", ""), reverse=True)[:6]:
+            if not any(a.get("id") == str(item.get("id")) for a in recent_activity):
                 recent_activity.append({
                     "id": str(item.get("id")),
                     "type": "scan",
@@ -434,17 +666,32 @@ class SupabaseService:
                     "timestamp": item.get("created_at"),
                 })
 
+        # Include recent real user sign-in events in activity stream
+        for audit in self._mock_audit_logs:
+            if audit.get("action") == "user_sign_in":
+                recent_activity.append({
+                    "id": audit.get("id"),
+                    "type": "user_sign_in",
+                    "scan_type": "sign_in",
+                    "risk_level": "Low",
+                    "risk_score": 0,
+                    "preview": audit.get("details", {}).get("message") or f"User signed in: {audit.get('admin_email')}",
+                    "timestamp": audit.get("created_at"),
+                })
+
+        recent_activity.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
         return {
             "total_scans": total_scans,
             "scans_today": scans_today,
             "registered_users": registered_users,
             "risk_breakdown": risk_breakdown,
             "scans_by_type": scans_by_type,
-            "recent_activity": recent_activity,
+            "recent_activity": recent_activity[:10],
             "system_status": {
                 "gemini_api": "Operational (Real-time AI heuristics)",
                 "safe_browsing_api": "Operational (v4 Threat Feeds)",
-                "supabase_db": "Connected (Row Level Security Active)" if self._client else "Offline / Disconnected",
+                "supabase_db": "Connected (Row Level Security Active)" if self._client else "Offline / Local Engine",
             },
         }
 
@@ -456,154 +703,179 @@ class SupabaseService:
         limit: int = 10,
     ) -> Dict[str, Any]:
         """
-        Retrieves registered users list for administrator management.
-        Calculates scan activity count per user without exposing passwords or tokens.
+        Retrieves real registered users list for administrator management.
+        Dynamically aggregates real users who have signed in, computes live scan counts,
+        and provides search, role filtering, and pagination.
         """
-        client = self.db_client
         offset = max(0, (page - 1) * limit)
 
-        # Fallback to mock profiles in local offline mode
-        if not client:
-            users_list = list(self._mock_profiles.values())
-            if role and role in ("admin", "individual"):
-                users_list = [u for u in users_list if u.get("role") == role]
-            if search:
-                s_lower = search.lower()
-                users_list = [
-                    u for u in users_list
-                    if s_lower in (u.get("email") or "").lower() or s_lower in str(u.get("id", "")).lower()
-                ]
+        # 1. Collect all users: registered users + mock profiles (for tests) + remote DB if any
+        all_users_dict: Dict[str, Dict[str, Any]] = {}
 
-            total = len(users_list)
-            paginated = users_list[offset : offset + limit]
-            enriched = []
-            for u in paginated:
-                uid = str(u.get("id"))
-                scan_count = len(self._mock_scans.get(uid, []))
-                enriched.append({
+        # Add registered users
+        for uid, u in self._registered_users.items():
+            all_users_dict[uid] = dict(u)
+
+        # Merge mock profiles (e.g. from tests)
+        for uid, p in self._mock_profiles.items():
+            # If we have real users, avoid showing hardcoded demo accounts unless requested
+            if uid in ("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"):
+                if len(self._registered_users) > 0 and not search and not role:
+                    continue
+            if uid not in all_users_dict:
+                all_users_dict[uid] = {
                     "id": uid,
-                    "email": u.get("email", ""),
-                    "role": u.get("role", "individual"),
-                    "created_at": u.get("created_at") or "",
-                    "updated_at": u.get("updated_at") or "",
-                    "scan_count": scan_count,
+                    "email": p.get("email", ""),
+                    "display_name": p.get("display_name") or (p.get("email", "").split("@")[0].title() if "@" in p.get("email", "") else "User"),
+                    "role": p.get("role", "individual"),
+                    "created_at": p.get("created_at") or "",
+                    "last_sign_in_at": p.get("last_sign_in_at") or p.get("updated_at") or p.get("created_at") or "",
                     "status": "active",
-                })
-            return {"total": total, "page": page, "limit": limit, "users": enriched}
+                }
 
-        try:
-            query = client.table("profiles").select("*", count="exact")
-            if role and role in ("admin", "individual"):
-                query = query.eq("role", role)
-            if search:
-                s_clean = search.strip()
-                query = query.or_(f"email.ilike.%{s_clean}%,id.eq.{s_clean}" if "-" in s_clean and len(s_clean) == 36 else f"email.ilike.%{s_clean}%")
+        # Query remote DB if connected
+        client = self.db_client
+        if client:
+            try:
+                res = client.table("profiles").select("*").execute()
+                for p in (res.data or []):
+                    uid = str(p.get("id"))
+                    if uid not in all_users_dict:
+                        all_users_dict[uid] = {
+                            "id": uid,
+                            "email": p.get("email", ""),
+                            "display_name": p.get("email", "").split("@")[0].title() if "@" in p.get("email", "") else "User",
+                            "role": p.get("role", "individual"),
+                            "created_at": p.get("created_at") or "",
+                            "last_sign_in_at": p.get("updated_at") or p.get("created_at") or "",
+                            "status": "active",
+                        }
+            except Exception as e:
+                logger.debug(f"Remote profiles fetch note: {e}")
 
-            res = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-            profiles_data = res.data or []
-            total_count = res.count if hasattr(res, "count") and res.count is not None else len(profiles_data)
+        # Compute dynamic scan counts per user
+        users_list = []
+        for uid, u in all_users_dict.items():
+            user_scans = self._mock_scans.get(uid, [])
+            scans_count = len(user_scans)
 
-            # If remote database returned no profiles, seamlessly check mock profiles
-            if not profiles_data and self._mock_profiles:
-                users_list = list(self._mock_profiles.values())
-                if role and role in ("admin", "individual"):
-                    users_list = [u for u in users_list if u.get("role") == role]
-                if search:
-                    s_lower = search.lower()
-                    users_list = [
-                        u for u in users_list
-                        if s_lower in (u.get("email") or "").lower() or s_lower in str(u.get("id", "")).lower()
-                    ]
-                total_count = len(users_list)
-                profiles_data = users_list[offset : offset + limit]
+            # Check by user email in all scans
+            u_email = (u.get("email") or "").lower()
+            if u_email:
+                extra_scans = [
+                    s for sublist in self._mock_scans.values() for s in sublist
+                    if (s.get("user_email") or "").lower() == u_email and s.get("user_id") != uid
+                ]
+                scans_count += len(extra_scans)
 
-            # Get scan counts per user
-            enriched = []
-            for p in profiles_data:
-                uid = str(p.get("id"))
-                scans_c = len(self._mock_scans.get(uid, []))
+            if client:
                 try:
-                    count_res = client.table("scan_history").select("id", count="exact").eq("user_id", uid).execute()
-                    if hasattr(count_res, "count") and count_res.count is not None:
-                        scans_c = max(scans_c, count_res.count)
+                    c_res = client.table("scan_history").select("id", count="exact").eq("user_id", uid).execute()
+                    if hasattr(c_res, "count") and c_res.count is not None:
+                        scans_count = max(scans_count, c_res.count)
                 except Exception:
                     pass
 
-                enriched.append({
-                    "id": uid,
-                    "email": p.get("email", ""),
-                    "role": p.get("role", "individual"),
-                    "created_at": p.get("created_at") or "",
-                    "updated_at": p.get("updated_at") or "",
-                    "scan_count": scans_c,
-                    "status": "active",
-                })
+            enriched_user = {
+                "id": str(u.get("id")),
+                "email": u.get("email", ""),
+                "display_name": u.get("display_name") or (u.get("email", "").split("@")[0].title() if "@" in u.get("email", "") else "User"),
+                "role": u.get("role", "individual"),
+                "created_at": u.get("created_at") or "",
+                "last_sign_in_at": u.get("last_sign_in_at") or u.get("created_at") or "",
+                "updated_at": u.get("updated_at") or "",
+                "scan_count": scans_count,
+                "status": "active",
+            }
+            users_list.append(enriched_user)
 
-            return {"total": total_count, "page": page, "limit": limit, "users": enriched}
-        except Exception as e:
-            logger.warning(f"Remote profiles query encountered note: {e}, using local records")
-            users_list = list(self._mock_profiles.values())
-            if role and role in ("admin", "individual"):
-                users_list = [u for u in users_list if u.get("role") == role]
-            if search:
-                s_lower = search.lower()
-                users_list = [
-                    u for u in users_list
-                    if s_lower in (u.get("email") or "").lower() or s_lower in str(u.get("id", "")).lower()
-                ]
-            total = len(users_list)
-            paginated = users_list[offset : offset + limit]
-            enriched = [
-                {
-                    "id": str(u.get("id")),
-                    "email": u.get("email", ""),
-                    "role": u.get("role", "individual"),
-                    "created_at": u.get("created_at") or "",
-                    "updated_at": u.get("updated_at") or "",
-                    "scan_count": len(self._mock_scans.get(str(u.get("id")), [])),
-                    "status": "active",
-                }
-                for u in paginated
+        # Apply filtering by role
+        if role and role in ("admin", "individual"):
+            users_list = [u for u in users_list if u.get("role") == role]
+
+        # Apply filtering by search term
+        if search:
+            s_lower = search.strip().lower()
+            users_list = [
+                u for u in users_list
+                if s_lower in u.get("email", "").lower()
+                or s_lower in u.get("display_name", "").lower()
+                or s_lower in u.get("id", "").lower()
             ]
-            return {"total": total, "page": page, "limit": limit, "users": enriched}
+
+        # Sort: Admins first, then latest signed in / created
+        users_list.sort(
+            key=lambda x: (
+                1 if x.get("role") == "admin" else 0,
+                x.get("last_sign_in_at") or x.get("created_at") or "",
+            ),
+            reverse=True,
+        )
+
+        total_count = len(users_list)
+        paginated = users_list[offset : offset + limit]
+
+        return {
+            "total": total_count,
+            "page": page,
+            "limit": limit,
+            "users": paginated,
+        }
 
     async def get_user_details(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves comprehensive account profile and scan activity for a specific user."""
         user_id_str = str(user_id)
-        profile = await self.get_user_profile(user_id_str)
-        if not profile:
+        user = self._registered_users.get(user_id_str) or self._mock_profiles.get(user_id_str)
+        if not user:
+            for u in self._registered_users.values():
+                if u.get("email", "").lower() == user_id_str.lower():
+                    user = u
+                    break
+        if not user:
+            user = await self.get_user_profile(user_id_str)
+
+        if not user:
             return None
 
         client = self.db_client
         recent_scans = []
-        total_scans = 0
+        user_scans = list(self._mock_scans.get(user.get("id", user_id_str), []))
+
+        u_email = (user.get("email") or "").lower()
+        if u_email:
+            for uid, scans in self._mock_scans.items():
+                if uid != user.get("id", user_id_str):
+                    for s in scans:
+                        if (s.get("user_email") or "").lower() == u_email and s not in user_scans:
+                            user_scans.append(s)
+
+        total_scans = len(user_scans)
+        recent_scans = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[:5]
 
         if client:
             try:
                 res = (
                     client.table("scan_history")
                     .select("id, scan_type, risk_level, risk_score, input_preview, created_at", count="exact")
-                    .eq("user_id", user_id_str)
+                    .eq("user_id", user.get("id", user_id_str))
                     .order("created_at", desc=True)
                     .range(0, 4)
                     .execute()
                 )
-                recent_scans = res.data or []
-                total_scans = res.count if hasattr(res, "count") and res.count is not None else len(recent_scans)
+                r_scans = res.data or []
+                if r_scans:
+                    recent_scans = r_scans
+                    total_scans = max(total_scans, res.count or len(r_scans))
             except Exception as e:
-                logger.warning(f"Could not fetch recent scans for user {user_id}: {e}")
-
-        if not recent_scans:
-            user_scans = self._mock_scans.get(user_id_str, [])
-            total_scans = max(total_scans, len(user_scans))
-            recent_scans = user_scans[:5]
+                logger.debug(f"Could not fetch recent scans for user {user_id}: {e}")
 
         return {
-            "id": user_id_str,
-            "email": profile.get("email", ""),
-            "role": profile.get("role", "individual"),
-            "created_at": profile.get("created_at"),
-            "updated_at": profile.get("updated_at"),
+            "id": user.get("id", user_id_str),
+            "email": user.get("email", ""),
+            "display_name": user.get("display_name") or user.get("email", "").split("@")[0].title(),
+            "role": user.get("role", "individual"),
+            "created_at": user.get("created_at"),
+            "last_sign_in_at": user.get("last_sign_in_at") or user.get("created_at"),
             "status": "active",
             "total_scans": total_scans,
             "recent_scans": recent_scans,
@@ -630,10 +902,21 @@ class SupabaseService:
         if admin_id_str == target_id_str and new_role != "admin":
             raise ValueError("Administrators cannot revoke their own admin permissions to prevent lockout.")
 
-        from datetime import datetime, timezone
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # Update in mock store
+        # Update in registered users and mock store
+        if target_id_str in self._registered_users:
+            self._registered_users[target_id_str]["role"] = new_role
+            self._registered_users[target_id_str]["updated_at"] = now_iso
+            self._save_registered_users()
+        else:
+            for uid, u in self._registered_users.items():
+                if u.get("email", "").lower() == target_id_str.lower():
+                    u["role"] = new_role
+                    u["updated_at"] = now_iso
+                    self._save_registered_users()
+                    break
+
         if target_id_str in self._mock_profiles:
             self._mock_profiles[target_id_str]["role"] = new_role
             self._mock_profiles[target_id_str]["updated_at"] = now_iso
@@ -681,6 +964,7 @@ class SupabaseService:
             "new_role": new_role,
             "message": f"Successfully updated user role to '{new_role}'.",
         }
+
 
     async def get_admin_scans(
         self,

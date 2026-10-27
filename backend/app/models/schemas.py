@@ -214,6 +214,18 @@ class UserProfileResponse(BaseModel):
     email: str
     role: str = "individual"
     created_at: Optional[str] = None
+    display_name: Optional[str] = None
+    last_sign_in_at: Optional[str] = None
+    status: Optional[str] = "active"
+
+
+class UserSessionRecordRequest(BaseModel):
+    user_id: Optional[str] = Field(None, description="User ID from auth provider")
+    email: str = Field(..., description="User email address")
+    display_name: Optional[str] = Field(None, description="User display name or full name")
+    role: Optional[str] = Field(None, description="User role: admin or individual")
+    last_sign_in_at: Optional[str] = Field(None, description="Timestamp when user signed in")
+
 
 
 class LoginRequest(BaseModel):
