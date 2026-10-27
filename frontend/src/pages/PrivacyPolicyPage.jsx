@@ -50,12 +50,17 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
   const textareaRef = useRef(null);
   const resultRef = useRef(null);
 
-  // Auto-populate when re-opened from Scan History
+  // Auto-populate when re-opened from Scan History (without automatic scan trigger)
   useEffect(() => {
     if (initialData?.preview || initialData?.policy_text) {
       const text = initialData.preview || initialData.policy_text;
       setPolicyText(text);
-      runPolicyScan(text);
+      if (initialData.result) {
+        setResult(initialData.result);
+      } else {
+        setResult(null);
+      }
+      setAlert(null);
     }
   }, [initialData]);
 
@@ -76,9 +81,10 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
 
   const handleSwitchToManualPaste = () => {
     setPolicyText('');
+    setResult(null);
     setAlert({
       type: 'info',
-      message: 'Website URL cleared. Paste the privacy policy text directly into the box below and click Analyse Policy.',
+      message: 'Website URL cleared. Paste the privacy policy text directly into the box below and click Analyze Privacy Policy.',
     });
     if (textareaRef.current) {
       textareaRef.current.focus();
@@ -86,14 +92,18 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
   };
 
   const runPolicyScan = async (textToScan) => {
-    const trimmed = (textToScan || '').trim();
+    const trimmed = (textToScan !== undefined ? textToScan : policyText).trim();
     if (!trimmed) {
       setAlert({
         type: 'warning',
-        message: 'Please paste privacy policy terms or enter a website URL to evaluate.',
+        message: 'Please enter a website URL or paste the privacy policy to analyze.',
       });
+      setResult(null);
       return;
     }
+
+    // Prevent duplicate or simultaneous requests
+    if (isLoading) return;
 
     if (!navigator.onLine || isOnline === false) {
       setAlert({
@@ -111,6 +121,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
         type: 'warning',
         message: 'Please provide at least 20 characters of policy terms for an accurate assessment.',
       });
+      setResult(null);
       return;
     }
 
@@ -119,7 +130,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
     if (isUrl) {
       setLoadingMessage('Fetching webpage and extracting privacy policy terms...');
     } else {
-      setLoadingMessage('Analysing privacy policy terms with DataRaksha AI...');
+      setLoadingMessage('Analyzing Privacy Policy...');
     }
 
     try {
@@ -134,8 +145,9 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
       });
     } catch (err) {
       const errMsg =
-        err.message ||
+        err.friendlyMessage ||
         err.response?.data?.detail ||
+        err.message ||
         'Failed to simplify policy. Please check the text or URL and try again.';
 
       setAlert({
@@ -162,6 +174,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
           </div>
         ),
       });
+      setResult(null);
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
@@ -170,8 +183,8 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
 
   const handleSelectPreset = (preset) => {
     setPolicyText(preset.text);
+    setResult(null);
     setAlert(null);
-    runPolicyScan(preset.text);
   };
 
   const handleScanPolicy = async () => {
@@ -243,6 +256,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
                 value={policyText}
                 onChange={(e) => {
                   setPolicyText(e.target.value);
+                  setResult(null);
                   if (alert) setAlert(null);
                 }}
                 placeholder="Paste the privacy policy text or enter the website URL (e.g. https://example.com/privacy)"
@@ -285,13 +299,13 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
                 type="button"
                 className="btn btn-primary policy-submit-btn"
                 onClick={handleScanPolicy}
-                disabled={isLoading || !policyText.trim() || !isOnline}
-                title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyse Policy'}
+                disabled={isLoading || !isOnline}
+                title={!isOnline ? 'No internet connection. Please check your network and try again.' : 'Analyze Privacy Policy'}
               >
                 {isLoading ? (
                   <>
                     <div className="spinner sm" />
-                    <span>{isCurrentInputUrl ? 'Fetching & Analysing...' : 'Analysing Policy...'}</span>
+                    <span>Analyzing Privacy Policy...</span>
                   </>
                 ) : !isOnline ? (
                   <>
@@ -299,7 +313,7 @@ export const PrivacyPolicyPage = ({ onNavigateBack, onNavigateToLetters, initial
                   </>
                 ) : (
                   <>
-                    <Sparkles size={16} /> Analyse Policy
+                    <Sparkles size={16} /> Analyze Privacy Policy
                   </>
                 )}
               </button>
