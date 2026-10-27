@@ -60,8 +60,8 @@ def test_dynamic_real_users_display_in_admin_portal():
     })
     assert res_session_b.status_code == 200
 
-    # 4. Admin queries user management endpoint: /api/v1/admin/users
-    res_users = client.get("/api/v1/admin/users", headers=admin_headers)
+    # 4. Admin queries user management endpoint: /api/v1/admin/users (with limit=100)
+    res_users = client.get("/api/v1/admin/users?limit=100", headers=admin_headers)
     assert res_users.status_code == 200
     users_data = res_users.json()
     assert "users" in users_data
