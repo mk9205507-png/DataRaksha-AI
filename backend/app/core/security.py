@@ -226,8 +226,19 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> UserC
 
     created_at = payload.get("created_at")
 
-    # Dynamically track real user activity in registry
-    if email and str(user_id) not in ("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"):
+    # Dynamically track real user activity in registry (ignore dummy test accounts)
+    is_dummy_account = (
+        str(user_id).startswith(("test-", "00000000-", "mock-", "allowlisted-"))
+        or clean_email.endswith("@dataraksha.ai")
+        or clean_email in (
+            "allowlisted@example.com",
+            "regular.user@example.com",
+            "another.user@example.com",
+            "accounttwo@example.com",
+            "nisha@example.com",
+        )
+    )
+    if email and not is_dummy_account:
         try:
             await supabase_service.record_user_activity(
                 user_id=str(user_id),

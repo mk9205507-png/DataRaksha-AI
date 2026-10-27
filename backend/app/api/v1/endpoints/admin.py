@@ -138,6 +138,7 @@ async def get_users(
         role=role,
         page=page,
         limit=limit,
+        requesting_user=admin_user,
     )
     return data
 

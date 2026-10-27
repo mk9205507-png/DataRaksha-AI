@@ -10,6 +10,19 @@ from app.services.supabase_service import supabase_service
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def cleanup_test_users():
+    yield
+    # Clean up test users from persistent disk registry, keeping only designated admin
+    supabase_service._registered_users = {
+        uid: u for uid, u in supabase_service._registered_users.items()
+        if u.get("email") == "mk9205507@gmail.com"
+    }
+    supabase_service._mock_scans.clear()
+    supabase_service._save_registered_users()
+    supabase_service._save_registered_scans()
+
+
 def generate_admin_token() -> str:
     """Generates valid JWT for designated administrator."""
     payload = {
